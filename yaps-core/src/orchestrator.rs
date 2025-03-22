@@ -3,43 +3,41 @@ use crate::plugin_connector::{PluginConnector, FunctionId, FunctionHandle};
 
 use std::collections::HashMap;
 
+pub type PluginId = String;
+pub type FunctionKey = (PluginId, FunctionId);
+
 pub trait Orchestrator<'a, Data> {
 
-    fn register_plugin<P: PluginConnector<Data> + 'a>(&mut self, plugin: P) -> Result<()>;
-
-    fn get_func(&self, id: &FunctionId) -> Result<FunctionHandle<Data>>;
+    fn register_plugin(&mut self, id: PluginId, plugin: Box<dyn PluginConnector<'a, Data>>) -> Result<()>;
+    fn get_func(&self, key: FunctionKey) -> Result<FunctionHandle<'a, Data>>;
 
 }
 
 #[derive(Default)]
 pub struct LocalOrchestrator<'a, Data> {
 
-    plugins: Vec<Box<dyn PluginConnector<Data> + 'a>>,
-    funcs_map: HashMap<FunctionId, usize>,
+    plugins: HashMap<PluginId, Box<dyn PluginConnector<'a, Data>>>,
 
 }
 
 impl<'a, Data> Orchestrator<'a, Data> for LocalOrchestrator<'a, Data> {
 
-    fn register_plugin<P: PluginConnector<Data> + 'a>(&mut self, plugin: P) -> Result<()> {
-        let index = self.plugins.len();
-
-        for func_id in plugin.provided_funcs() {
-            self.funcs_map.insert(func_id, index);
+    fn register_plugin(&mut self, id: PluginId, plugin: Box<dyn PluginConnector<'a, Data>>) -> Result<()> {
+        if self.plugins.contains_key(&id) {
+            return Err(Error::PluginRegistered(id));
         }
 
-        self.plugins.push(Box::new(plugin));
+        self.plugins.insert(id, plugin);
 
         Ok(())
     }
 
-    fn get_func(&self, id: &FunctionId) -> Result<FunctionHandle<Data>> {
-        let plugin_index = *self.funcs_map.get(id)
-            .ok_or_else(|| Error::FunctionNotFound(id.into()))?;
+    fn get_func(&self, key: FunctionKey) -> Result<FunctionHandle<'a, Data>> {
+        let (plugin_id, function_id) = key;
 
+        let plugin = self.plugins.get(&plugin_id).ok_or(Error::PluginNotFound(plugin_id))?;
         
-        let plugin = &self.plugins[plugin_index];
-        plugin.get_func(id)
+        plugin.get_func(&function_id)
     }
 
 }

@@ -65,10 +65,10 @@ fn string_call_test() -> Result<()> {
     let mut orchestrator = LocalOrchestrator::<Vec<u8>>::default();
     let plugin = TestPlugin;
 
-    orchestrator.register_plugin(plugin)?;
+    orchestrator.register_plugin("Plugin".into(), Box::new(plugin))?;
 
-    let reverse_func = orchestrator.get_func(&"reverse".to_string())?;
-    let echo_func = orchestrator.get_func(&"echo".to_string())?;
+    let reverse_func = orchestrator.get_func(("Plugin".into(), "reverse".into()))?;
+    let echo_func = orchestrator.get_func(("Plugin".into(), "echo".into()))?;
 
     let in_data: Vec<u8> = "\"dupa\"".into();
     let out_data: Vec<u8> = in_data.clone();
@@ -85,9 +85,9 @@ fn int_call_test() -> Result<()> {
     let mut orchestrator = LocalOrchestrator::<Vec<u8>>::default();
     let plugin = TestPlugin;
 
-    orchestrator.register_plugin(plugin)?;
+    orchestrator.register_plugin("Plugin".into(), Box::new(plugin))?;
 
-    let add_func = orchestrator.get_func(&"add".to_string())?;
+    let add_func = orchestrator.get_func(("Plugin".into(), "add".into()))?;
 
     let in_data: Vec<u8> = "[1, 2]".into();
     let out_data: Vec<u8> = "3".into();
@@ -102,9 +102,9 @@ fn mixed_call_test() -> Result<()> {
     let mut orchestrator = LocalOrchestrator::<Vec<u8>>::default();
     let plugin = TestPlugin;
 
-    orchestrator.register_plugin(plugin)?;
+    orchestrator.register_plugin("Plugin".into(), plugin)?;
 
-    let format_func = orchestrator.get_func(&"format".to_string())?;
+    let format_func = orchestrator.get_func(("Plugin".into(), "format".into()))?;
 
     let in_data: Vec<u8> = "[\":)\", 123]".into();
     let out_data: Vec<u8> = "\":) and 123\"".into();
@@ -119,9 +119,9 @@ fn error_test() -> Result<()> {
     let mut orchestrator = LocalOrchestrator::<Vec<u8>>::default();
     let plugin = TestPlugin;
 
-    orchestrator.register_plugin(plugin)?;
+    orchestrator.register_plugin("Plugin".into(), plugin)?;
 
-    let error_func = orchestrator.get_func(&"error".to_string())?;
+    let error_func = orchestrator.get_func(("Plugin".into(), "error".into()))?;
 
     let in_data: Vec<u8> = "null".into();
     let out_data: Vec<u8> = "{\"Err\":\"Error :(\"}".into();

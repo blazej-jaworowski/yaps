@@ -1,8 +1,9 @@
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 use quote::quote;
-use syn::{parse_macro_input, ItemImpl, ImplItem, ImplItemFn, LitStr, Ident, FnArg, Pat, Type};
+use syn::{parse_macro_input, ItemImpl, ImplItem, ImplItemFn, LitStr, Ident, FnArg, Pat, Type, Error};
 
-fn plugin_funcs(impl_block: &ItemImpl) -> impl Iterator<Item = &ImplItemFn> {
+fn yaps_funcs(impl_block: &ItemImpl) -> impl Iterator<Item = &ImplItemFn> {
     impl_block.items.iter()
         .filter_map(|impl_item| {
             match impl_item {
@@ -11,72 +12,28 @@ fn plugin_funcs(impl_block: &ItemImpl) -> impl Iterator<Item = &ImplItemFn> {
             }
         })
         .filter(|func| {
-            func.attrs.iter().any(|attr| attr.path().is_ident("plugin_func"))
+            func.attrs.iter().any(|attr| attr.path().is_ident("yaps_func"))
         })
-}
-
-fn make_serde_func(func: &ImplItemFn, serde_func: &Ident, data_type: &Type) -> proc_macro2::TokenStream {
-    let func_ident = &func.sig.ident;
-
-    let args = func.sig.inputs.iter()
-        .filter_map(|input| {
-            match input {
-                FnArg::Typed(t) => Some(t),
-                _ => None,
-            }
-        })
-        .filter_map(|pat_type| {
-            match &*pat_type.pat {
-                Pat::Ident(pat_ident) => {
-                    let arg_ident = &pat_ident.ident;
-                    let arg_type = &pat_type.ty;
-                    Some((arg_ident, arg_type))
-                },
-                _ => None,
-            }
-        });
-
-    let var_ident = args.clone()
-        .map(|(arg_ident, _)| {
-            arg_ident
-        });
-
-    let var_ident_clone = var_ident.clone();
-
-    let var_types = args.clone()
-        .map(|(_, arg_type)| {
-            arg_type
-        });
-
-    quote! {
-        fn #serde_func(
-            &self,
-            args: #data_type,
-        ) -> Result<#data_type> {
-            let ( #( #var_ident ),* ): ( #( #var_types ),* ) = self.deserialize(args)?;
-
-            let result = self.#func_ident( #( #var_ident_clone ),* );
-
-            let serialized_result = self.serialize(result)?;
-
-            Ok(serialized_result)
-        }
-    }
 }
 
 #[proc_macro_attribute]
-pub fn plugin_connector(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let data_type = parse_macro_input!(attr as Type);
+pub fn yaps_plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
+    if attr.is_empty() {
+        let error = Error::new(Span::call_site(), "You need to provide serialized data type");
+        return error.to_compile_error().into();
+    }
 
     let impl_block = parse_macro_input!(item as ItemImpl);
+    let data_type = parse_macro_input!(attr as Type);
 
     let self_ty = &impl_block.self_ty;
 
+    let generics = &impl_block.generics;
+
     let mut provided_funcs = Vec::new();
-    let mut serde_funcs = Vec::new();
     let mut match_arms = Vec::new();
 
-    for func in plugin_funcs(&impl_block) {
+    for func in yaps_funcs(&impl_block) {
         let func_ident = &func.sig.ident;
 
         let func_name = func_ident.to_string();
@@ -84,44 +41,114 @@ pub fn plugin_connector(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         provided_funcs.push(quote! { #name_str.into() });
 
-        let serde_func_name = "serde_".to_string() + &func_name;
-        let serde_func = Ident::new(&serde_func_name, func_ident.span());
+        let args = func.sig.inputs.iter()
+            .filter_map(|input| {
+                match input {
+                    FnArg::Typed(t) => Some(t),
+                    _ => None,
+                }
+            })
+            .filter_map(|pat_type| {
+                match &*pat_type.pat {
+                    Pat::Ident(pat_ident) => {
+                        let arg_ident = &pat_ident.ident;
+                        let arg_type = &pat_type.ty;
+                        Some((arg_ident, arg_type))
+                    },
+                    _ => None,
+                }
+            });
 
-        serde_funcs.push(make_serde_func(func, &serde_func, &data_type));
+        // TODO: A lot of cloning is happening here, maybe there is a better way
+        let var_ident = args.clone()
+            .map(|(arg_ident, _)| {
+                arg_ident
+            });
+
+        let var_ident_clone = var_ident.clone();
+
+        let var_types = args
+            .map(|(_, arg_type)| {
+                arg_type
+            });
 
         match_arms.push(quote! {
             #name_str => {
-                Ok(std::rc::Rc::new(|args: #data_type| -> Result<#data_type> {
-                    self.#serde_func(args)
+                let wrapped = self.0.clone();
+                Ok(Box::new(move |args: #data_type| -> Result<#data_type> {
+                    let ( #( #var_ident ),* ): ( #( #var_types ),* ) = wrapped.deserialize(args)?;
+
+                    let result = wrapped.#func_ident( #( #var_ident_clone ),* );
+
+                    let serialized_result = wrapped.serialize(result)?;
+
+                    Ok(serialized_result)
                 }))
             }
         });
     }
 
+    // TODO: Let the wrapper type name be set by the user in the future
+    let mut wrapper_type = Ident::new("WrappedPlugin", Span::call_site());
+    if let Type::Path(p) = *self_ty.clone() {
+
+        if let Some(last_segment) = p.path.segments.last() {
+            let last_segment = last_segment.ident.clone();
+            wrapper_type = Ident::new(&(last_segment.to_string() + "Connector"), Span::call_site());
+        }
+    }
+
+    let plugin_lifetime = quote! { 'plugin };
+
+    // We need to add the plugin lifetime to the generic's if it's not already there
+    let plugin_generics = if generics.lifetimes().any(|lifetime| {
+        lifetime.lifetime.ident == "plugin"
+    }) {
+        quote! { #generics }
+    } else {
+        let params = generics.params.clone();
+        quote!{ < 'plugin, #params >  }
+    };
+
     let generated = quote! {
+        // Leave original code as is
         #impl_block
 
-        const _: () = {
-            use ::yaps_core::plugin_connector::WithSerde;
-            fn _check<T: WithSerde<#data_type>>() {};
-            _check::<#self_ty>;
-        };
+        // Define a wrapper type
+        struct #wrapper_type #generics(std::rc::Rc<#self_ty>);
 
-        impl #self_ty {
-            #( #serde_funcs )*
+        impl #generics #self_ty {
+
+            // Helper
+            fn wrap(self) -> #wrapper_type #generics {
+                #wrapper_type::new(self)
+            }
+
         }
 
-        impl ::yaps_core::PluginConnector<#data_type> for #self_ty {
+        impl #generics #wrapper_type #generics {
+
+            // Helper
+            fn new(wrapped: #self_ty) -> #wrapper_type #generics {
+                #wrapper_type(std::rc::Rc::new(wrapped))
+            }
+
+        }
+
+        // We need the additional 'plugin lifetime here
+        impl #plugin_generics ::yaps_core::PluginConnector<#plugin_lifetime, #data_type> for #wrapper_type #generics {
+
             fn provided_funcs(&self) -> Vec<::yaps_core::FunctionId> {
                 vec![ #( #provided_funcs ),* ]
             }
 
-            fn get_func(&self, id: &::yaps_core::FunctionId) -> Result<::yaps_core::FunctionHandle<#data_type>> {
+            fn get_func(&self, id: &::yaps_core::FunctionId) -> Result<::yaps_core::FunctionHandle<#plugin_lifetime, #data_type>> {
                 match id.as_str() {
                     #( #match_arms ),*
                     _ => Err(::yaps_core::Error::FunctionNotFound(id.into()))
                 }
             }
+
         }
     };
 
@@ -129,6 +156,7 @@ pub fn plugin_connector(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn plugin_func(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn yaps_func(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // This attribute is just a marker
     item
 }
