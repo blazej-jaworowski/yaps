@@ -46,6 +46,7 @@ where
 
 }
 
+// TODO: For now all arguments must have the same type, maybe change this in the future
 pub struct MacroArgs<T>(HashMap<String, T>);
 
 impl<T> MacroArgs<T> {

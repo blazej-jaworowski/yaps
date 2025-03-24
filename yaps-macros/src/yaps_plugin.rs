@@ -57,7 +57,7 @@ impl YapsPluginInfo {
     }
 
     fn get_init_func(impl_block: &ItemImpl) -> Result<Option<Ident>> {
-        let init_funcs: Vec<Ident> = attr_funcs(impl_block, "yaps_plugin_init".into())
+        let init_funcs: Vec<Ident> = attr_funcs(impl_block, "yaps_init".into())
             .map(|func| {
                 func.sig.ident.clone()
             })
