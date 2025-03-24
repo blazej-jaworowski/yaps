@@ -10,6 +10,7 @@ pub trait Orchestrator<'a, Data> {
 
     fn register_plugin(&mut self, id: PluginId, plugin: Box<dyn PluginConnector<'a, Data>>) -> Result<()>;
     fn get_func(&self, key: FunctionKey) -> Result<FunctionHandle<'a, Data>>;
+    fn init(&self) -> Result<()>;
 
 }
 
@@ -38,6 +39,13 @@ impl<'a, Data> Orchestrator<'a, Data> for LocalOrchestrator<'a, Data> {
         let plugin = self.plugins.get(&plugin_id).ok_or(Error::PluginNotFound(plugin_id))?;
         
         plugin.get_func(&function_id)
+    }
+
+    fn init(&self) -> Result<()> {
+        for plugin in self.plugins.values() {
+            plugin.init(self)?;
+        }
+        Ok(())
     }
 
 }

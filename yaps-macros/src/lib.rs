@@ -3,7 +3,7 @@ use proc_macro2::Span;
 use quote::quote;
 use syn::{parse_macro_input, ItemImpl, ImplItem, ImplItemFn, LitStr, Ident, FnArg, Pat, Type, Error};
 
-fn yaps_funcs(impl_block: &ItemImpl) -> impl Iterator<Item = &ImplItemFn> {
+fn impl_funcs(impl_block: &ItemImpl) -> impl Iterator<Item = &ImplItemFn> {
     impl_block.items.iter()
         .filter_map(|impl_item| {
             match impl_item {
@@ -11,9 +11,12 @@ fn yaps_funcs(impl_block: &ItemImpl) -> impl Iterator<Item = &ImplItemFn> {
                 _ => None,
             }
         })
-        .filter(|func| {
-            func.attrs.iter().any(|attr| attr.path().is_ident("yaps_func"))
-        })
+}
+
+fn attr_funcs(impl_block: &ItemImpl, attr_name: String) -> impl Iterator<Item = &ImplItemFn> {
+    impl_funcs(impl_block).filter(move |func| {
+        func.attrs.iter().any(|attr| attr.path().is_ident(&attr_name))
+    })
 }
 
 #[proc_macro_attribute]
@@ -27,13 +30,24 @@ pub fn yaps_plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let data_type = parse_macro_input!(attr as Type);
 
     let self_ty = &impl_block.self_ty;
-
     let generics = &impl_block.generics;
+
+    let init_funcs: Vec<&ImplItemFn> = attr_funcs(&impl_block, "yaps_plugin_init".into()).collect();
+    if init_funcs.len() > 1 {
+        let error = Error::new(Span::call_site(), "Only one init func allowed");
+        return error.to_compile_error().into();
+    }
+
+    let init_func = if init_funcs.is_empty() {
+        None
+    } else {
+        Some(init_funcs[0])
+    };
 
     let mut provided_funcs = Vec::new();
     let mut match_arms = Vec::new();
 
-    for func in yaps_funcs(&impl_block) {
+    for func in attr_funcs(&impl_block, "yaps_func".into()) {
         let func_ident = &func.sig.ident;
 
         let func_name = func_ident.to_string();
@@ -76,11 +90,13 @@ pub fn yaps_plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             #name_str => {
                 let wrapped = self.0.clone();
                 Ok(Box::new(move |args: #data_type| -> Result<#data_type> {
-                    let ( #( #var_ident ),* ): ( #( #var_types ),* ) = wrapped.deserialize(args)?;
+                    let serde = wrapped.serde();
+
+                    let ( #( #var_ident ),* ): ( #( #var_types ),* ) = serde.deserialize(args)?;
 
                     let result = wrapped.#func_ident( #( #var_ident_clone ),* );
 
-                    let serialized_result = wrapped.serialize(result)?;
+                    let serialized_result = serde.serialize(result)?;
 
                     Ok(serialized_result)
                 }))
@@ -108,6 +124,15 @@ pub fn yaps_plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         let params = generics.params.clone();
         quote!{ < 'plugin, #params >  }
+    };
+
+    let init_body = if let Some(init_func) = init_func {
+        let init_func = init_func.sig.ident.clone();
+        quote! {
+            self.0.#init_func(orchestrator)
+        }
+    } else {
+        quote! { Ok(()) }
     };
 
     let generated = quote! {
@@ -138,6 +163,13 @@ pub fn yaps_plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
         // We need the additional 'plugin lifetime here
         impl #plugin_generics ::yaps_core::PluginConnector<#plugin_lifetime, #data_type> for #wrapper_type #generics {
 
+            fn init(
+                &self,
+                orchestrator: &dyn Orchestrator<#plugin_lifetime, Vec<u8>>
+            ) -> Result<()> {
+                #init_body
+            }
+
             fn provided_funcs(&self) -> Vec<::yaps_core::FunctionId> {
                 vec![ #( #provided_funcs ),* ]
             }
@@ -153,6 +185,12 @@ pub fn yaps_plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     generated.into()
+}
+
+#[proc_macro_attribute]
+pub fn yaps_plugin_init(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // This attribute is just a marker
+    item
 }
 
 #[proc_macro_attribute]
