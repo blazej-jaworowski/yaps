@@ -1,16 +1,16 @@
-use proc_macro2::{TokenStream as TokenStream2, Span};
+use proc_macro2::{TokenStream, Span};
 use quote::quote;
 use syn::{
-    ItemImpl,
+    ItemImpl, TraitItemFn,
     LitStr, Ident, Type,
-    FnArg, Pat,
+    ReturnType,
     Signature,
     Generics,
     Result, Error,
     parse::{Parse, ParseStream},
 };
 
-use crate::utils::{attr_funcs, MacroArgs};
+use crate::utils::{attr_funcs, func_args, MacroArgs};
 
 pub struct YapsPluginArgs {
     data_type: Type,
@@ -38,6 +38,7 @@ impl Parse for YapsPluginArgs {
 
 pub struct YapsPluginInfo {
     impl_block: ItemImpl,
+
     init_func: Option<Ident>,
     yaps_funcs: Vec<Signature>,
     wrapped_type: Type,
@@ -111,49 +112,7 @@ impl YapsPluginInfo {
         Ident::new("WrappedPlugin", Span::call_site())
     }
 
-    fn generate_wrapper_type_definition(&self) -> TokenStream2 {
-        let wrapper_type = self.wrapper_type();
-        let generics = self.generics.clone();
-        let wrapped_type = self.wrapped_type.clone();
-
-        quote! {
-            struct #wrapper_type #generics(std::rc::Rc<#wrapped_type>);
-        }
-    }
-
-    fn generate_wrap_helper(&self) -> TokenStream2 {
-        let generics = self.generics.clone();
-        let wrapped_type = self.wrapped_type.clone();
-        let wrapper_type = self.wrapper_type();
-
-        quote! {
-            impl #generics #wrapped_type {
-
-                fn wrap(self) -> #wrapper_type #generics {
-                    #wrapper_type::new(self)
-                }
-
-            }
-        }
-    }
-
-    fn generate_new_helper(&self) -> TokenStream2 {
-        let wrapped_type = self.wrapped_type.clone();
-        let generics = self.generics.clone();
-        let wrapper_type = self.wrapper_type();
-
-        quote! {
-            impl #generics #wrapper_type #generics {
-
-                fn new(wrapped: #wrapped_type) -> #wrapper_type #generics {
-                    #wrapper_type(std::rc::Rc::new(wrapped))
-                }
-
-            }
-        }
-    }
-
-    fn generate_provided_funcs(&self) -> TokenStream2 {
+    fn generate_provided_funcs(&self) -> TokenStream {
         let funcs_names = self.yaps_funcs.iter()
             .map(|func| LitStr::new(&func.ident.to_string(), func.ident.span()));
 
@@ -164,7 +123,7 @@ impl YapsPluginInfo {
         }
     }
 
-    fn generate_init_func(&self) -> TokenStream2 {
+    fn generate_init_func(&self) -> TokenStream {
         let init_body = if let Some(init_func) = &self.init_func {
             let init_func = init_func.clone();
             quote! {
@@ -186,37 +145,21 @@ impl YapsPluginInfo {
         }
     }
 
-    fn generate_match_arm(&self, args: &YapsPluginArgs, func: &Signature) -> TokenStream2 {
+    fn generate_match_arm(&self, args: &YapsPluginArgs, func: &Signature) -> TokenStream {
         let func_ident = func.ident.clone();
         let name_str = LitStr::new(&func.ident.to_string(), func.ident.span());
         let data_type = args.data_type.clone();
 
-        let func_args = func.inputs.iter()
-            .filter_map(|input| {
-                match input {
-                    FnArg::Typed(t) => Some(t),
-                    _ => None,
-                }
-            })
-            .filter_map(|pat_type| {
-                match &*pat_type.pat {
-                    Pat::Ident(pat_ident) => {
-                        let arg_ident = &pat_ident.ident;
-                        let arg_type = &pat_type.ty;
-                        Some((arg_ident, arg_type))
-                    },
-                    _ => None,
-                }
-            });
+        let func_args = func_args(func);
 
-        let var_ident = func_args.clone()
+        let var_ident = func_args.iter()
             .map(|(arg_ident, _)| {
                 arg_ident
             });
 
         let var_ident_clone = var_ident.clone();
 
-        let var_types = func_args
+        let var_types = func_args.iter()
             .map(|(_, arg_type)| {
                 arg_type
             });
@@ -235,7 +178,7 @@ impl YapsPluginInfo {
         }
     }
 
-    fn generate_get_func(&self, args: &YapsPluginArgs) -> TokenStream2 {
+    fn generate_get_func(&self, args: &YapsPluginArgs) -> TokenStream {
         let data_type = args.data_type.clone();
         let match_arms = self.yaps_funcs.iter()
             .map(|func| {
@@ -254,7 +197,7 @@ impl YapsPluginInfo {
         }
     }
 
-    pub fn generate(self, args: YapsPluginArgs) -> TokenStream2 {
+    pub fn generate(self, args: YapsPluginArgs) -> TokenStream {
         let generics = self.generics.clone();
         let impl_block = self.impl_block.clone();
         let data_type = args.data_type.clone();
@@ -268,10 +211,8 @@ impl YapsPluginInfo {
             quote!{ < 'plugin, #params >  }
         };
 
+        let wrapped_type = self.wrapped_type.clone();
         let wrapper_type = self.wrapper_type();
-        let wrapper_type_definition = self.generate_wrapper_type_definition();
-        let wrap_helper = self.generate_wrap_helper();
-        let new_helper = self.generate_new_helper();
 
         let init_func = self.generate_init_func();
         let provided_funcs = self.generate_provided_funcs();
@@ -281,15 +222,78 @@ impl YapsPluginInfo {
             // Leave original code as is
             #impl_block
 
-            #wrapper_type_definition
-            #wrap_helper
-            #new_helper
+            // Wrapper type definition
+            struct #wrapper_type #generics(std::rc::Rc<#wrapped_type>);
+
+            // Wrap helper
+            impl #generics #wrapped_type {
+                fn wrap(self) -> #wrapper_type #generics {
+                    #wrapper_type::new(self)
+                }
+            }
+
+            // New helper
+            impl #generics #wrapper_type #generics {
+                fn new(wrapped: #wrapped_type) -> #wrapper_type #generics {
+                    #wrapper_type(std::rc::Rc::new(wrapped))
+                }
+            }
 
             impl #plugin_generics ::yaps_core::PluginConnector<'plugin, #data_type>
                 for #wrapper_type #generics {
                 #init_func
                 #provided_funcs
                 #get_func
+            }
+        }
+    }
+
+}
+
+/* Extern funcs */
+
+pub struct YapsExternFuncInfo {
+    sig: Signature,
+}
+
+impl Parse for YapsExternFuncInfo {
+
+    fn parse(input: ParseStream) -> Result<Self> {
+        let func: TraitItemFn = input.parse()?;
+
+        Ok(YapsExternFuncInfo {
+            sig: func.sig,
+        })
+    }
+
+}
+
+impl YapsExternFuncInfo {
+
+    pub fn generate(self) -> TokenStream {
+        let args = func_args(&self.sig);
+        let var_idents = args.iter()
+            .map(|(arg_ident, _)| {
+                arg_ident
+            });
+
+        let ident = self.sig.ident.clone();
+        let handle_ident = Ident::new(&format!("{ident}_handle"), ident.span());
+        let inputs = self.sig.inputs;
+        let ret_type = match self.sig.output {
+            ReturnType::Default => quote!{ () },
+            ReturnType::Type(_, t) => quote!{ #t },
+        };
+
+        quote! {
+            fn #ident (&self, #inputs) -> ::yaps_core::Result<#ret_type> {
+                let serde = self.serde();
+                let args = serde.serialize((#( #var_idents ),*))?;
+
+                let func_handle = &*self.#handle_ident.borrow();
+                let result = func_handle(args)?;
+
+                serde.deserialize(result)
             }
         }
     }

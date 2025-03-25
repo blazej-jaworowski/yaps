@@ -1,6 +1,7 @@
 use syn::{
     ImplItem, ItemImpl, ImplItemFn,
-    Ident,
+    Ident, Type, Signature,
+    FnArg, Pat,
     punctuated::Punctuated,
     parse::{Parse, ParseStream},
     Token,
@@ -22,6 +23,27 @@ pub fn attr_funcs(impl_block: &ItemImpl, attr_name: String) -> impl Iterator<Ite
     impl_funcs(impl_block).filter(move |func| {
         func.attrs.iter().any(|attr| attr.path().is_ident(&attr_name))
     })
+}
+
+pub fn func_args(sig: &Signature) -> Vec<(Ident, Type)> {
+    sig.inputs.iter()
+        .filter_map(|input| {
+            match input {
+                FnArg::Typed(t) => Some(t),
+                _ => None,
+            }
+        })
+        .filter_map(|pat_type| {
+            match &*pat_type.pat {
+                Pat::Ident(pat_ident) => {
+                    let arg_ident = pat_ident.ident.clone();
+                    let arg_type = (*pat_type.ty).clone();
+                    Some((arg_ident, arg_type))
+                },
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 struct MacroField<T> {

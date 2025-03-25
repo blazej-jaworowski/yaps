@@ -5,7 +5,7 @@ mod utils;
 mod yaps_plugin;
 mod with_serde;
 
-use yaps_plugin::{YapsPluginInfo, YapsPluginArgs};
+use yaps_plugin::{YapsPluginInfo, YapsPluginArgs, YapsExternFuncInfo};
 use with_serde::{WithSerdeInfo, WithSerdeArgs};
 
 #[proc_macro_attribute]
@@ -34,4 +34,11 @@ pub fn yaps_init(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn yaps_func(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // This attribute is just a marker
     item
+}
+
+#[proc_macro_attribute]
+pub fn yaps_extern_func(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let extern_func = parse_macro_input!(item as YapsExternFuncInfo);
+
+    extern_func.generate().into()
 }
