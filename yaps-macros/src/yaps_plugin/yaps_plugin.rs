@@ -1,16 +1,17 @@
 use proc_macro2::{TokenStream, Span};
 use quote::quote;
 use syn::{
-    ItemImpl, TraitItemFn,
+    ItemImpl,
     LitStr, Ident, Type,
-    ReturnType,
     Signature,
     Generics,
     Result, Error,
     parse::{Parse, ParseStream},
+    visit_mut::VisitMut,
 };
 
 use crate::utils::{attr_funcs, func_args, MacroArgs};
+use super::yaps_extern_func::YapsExternFuncs;
 
 pub struct YapsPluginArgs {
     data_type: Type,
@@ -76,7 +77,10 @@ impl YapsPluginInfo {
 impl Parse for YapsPluginInfo {
 
     fn parse(input: ParseStream) -> Result<Self> {
-        let impl_block: ItemImpl = input.parse()?;
+        let mut impl_block: ItemImpl = input.parse()?;
+
+        let mut extern_func_visitor = YapsExternFuncs::default();
+        extern_func_visitor.visit_item_impl_mut(&mut impl_block);
 
         let yaps_funcs = Self::get_yaps_funcs(&impl_block)?;
         let init_func = Self::get_init_func(&impl_block)?;
@@ -244,56 +248,6 @@ impl YapsPluginInfo {
                 #init_func
                 #provided_funcs
                 #get_func
-            }
-        }
-    }
-
-}
-
-/* Extern funcs */
-
-pub struct YapsExternFuncInfo {
-    sig: Signature,
-}
-
-impl Parse for YapsExternFuncInfo {
-
-    fn parse(input: ParseStream) -> Result<Self> {
-        let func: TraitItemFn = input.parse()?;
-
-        Ok(YapsExternFuncInfo {
-            sig: func.sig,
-        })
-    }
-
-}
-
-impl YapsExternFuncInfo {
-
-    pub fn generate(self) -> TokenStream {
-        let args = func_args(&self.sig);
-        let var_idents = args.iter()
-            .map(|(arg_ident, _)| {
-                arg_ident
-            });
-
-        let ident = self.sig.ident.clone();
-        let handle_ident = Ident::new(&format!("{ident}_handle"), ident.span());
-        let inputs = self.sig.inputs;
-        let ret_type = match self.sig.output {
-            ReturnType::Default => quote!{ () },
-            ReturnType::Type(_, t) => quote!{ #t },
-        };
-
-        quote! {
-            fn #ident (&self, #inputs) -> ::yaps_core::Result<#ret_type> {
-                let serde = self.serde();
-                let args = serde.serialize((#( #var_idents ),*))?;
-
-                let func_handle = &*self.#handle_ident.borrow();
-                let result = func_handle(args)?;
-
-                serde.deserialize(result)
             }
         }
     }
