@@ -11,7 +11,10 @@ use syn::{
 };
 
 use crate::utils::{attr_funcs, func_args, MacroArgs};
-use super::yaps_extern_func::YapsExternFuncs;
+use super::{
+    yaps_extern_func::YapsExternFuncs,
+    yaps_init::YapsInitFunc,
+};
 
 pub struct YapsPluginArgs {
     data_type: Type,
@@ -40,7 +43,9 @@ impl Parse for YapsPluginArgs {
 pub struct YapsPluginInfo {
     impl_block: ItemImpl,
 
-    init_func: Option<Ident>,
+    extern_funcs: YapsExternFuncs,
+    init_func: YapsInitFunc,
+
     yaps_funcs: Vec<Signature>,
     wrapped_type: Type,
     generics: Generics,
@@ -58,20 +63,6 @@ impl YapsPluginInfo {
         )
     }
 
-    fn get_init_func(impl_block: &ItemImpl) -> Result<Option<Ident>> {
-        let init_funcs: Vec<Ident> = attr_funcs(impl_block, "yaps_init".into())
-            .map(|func| {
-                func.sig.ident.clone()
-            })
-            .collect();
-
-        if init_funcs.len() > 1 {
-            return Err(Error::new(Span::call_site(), "Only one init func allowed"));
-        }
-
-        Ok(init_funcs.first().cloned())
-    }
-
 }
 
 impl Parse for YapsPluginInfo {
@@ -79,17 +70,22 @@ impl Parse for YapsPluginInfo {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut impl_block: ItemImpl = input.parse()?;
 
-        let mut extern_func_visitor = YapsExternFuncs::default();
-        extern_func_visitor.visit_item_impl_mut(&mut impl_block);
+        let mut extern_funcs = YapsExternFuncs::default();
+        extern_funcs.visit_item_impl_mut(&mut impl_block);
+
+        let mut init_func = YapsInitFunc::new(extern_funcs.extern_funcs.clone());
+        init_func.visit_item_impl_mut(&mut impl_block);
 
         let yaps_funcs = Self::get_yaps_funcs(&impl_block)?;
-        let init_func = Self::get_init_func(&impl_block)?;
         let wrapped_type = *impl_block.self_ty.clone();
         let generics = impl_block.generics.clone();
 
         Ok(YapsPluginInfo {
             impl_block,
+
+            extern_funcs,
             init_func,
+
             yaps_funcs,
             wrapped_type,
             generics,
@@ -123,28 +119,6 @@ impl YapsPluginInfo {
         quote! {
             fn provided_funcs(&self) -> Vec<String> {
                 vec![ #( #funcs_names.into() ),* ]
-            }
-        }
-    }
-
-    fn generate_init_func(&self) -> TokenStream {
-        let init_body = if let Some(init_func) = &self.init_func {
-            let init_func = init_func.clone();
-            quote! {
-                self.0.#init_func(orchestrator)
-            }
-        } else {
-            quote! {
-                Ok(())
-            }
-        };
-
-        quote! {
-            fn init(
-                &self,
-                orchestrator: &dyn Orchestrator<'plugin, Vec<u8>>
-            ) -> Result<()> {
-                #init_body
             }
         }
     }
@@ -218,7 +192,26 @@ impl YapsPluginInfo {
         let wrapped_type = self.wrapped_type.clone();
         let wrapper_type = self.wrapper_type();
 
-        let init_func = self.generate_init_func();
+        let (init_func_ident, init_func_definition) = match &self.init_func.init_func {
+            Some(i) => (
+                i.clone(),
+                quote! {},
+            ),
+            None => {
+                let init_body = self.init_func.generate_funcs_init_block();
+                (
+                    Ident::new("init", Span::call_site()),
+                    quote! {
+                        fn init(
+                            &self,
+                            orchestrator: &dyn Orchestrator<'plugin, Vec<u8>>,
+                        ) -> Result<()> {
+                            #init_body
+                        }
+                    }
+                )
+            },
+        };
         let provided_funcs = self.generate_provided_funcs();
         let get_func = self.generate_get_func(&args);
 
@@ -234,6 +227,8 @@ impl YapsPluginInfo {
                 fn wrap(self) -> #wrapper_type #generics {
                     #wrapper_type::new(self)
                 }
+
+                #init_func_definition
             }
 
             // New helper
@@ -245,7 +240,15 @@ impl YapsPluginInfo {
 
             impl #plugin_generics ::yaps_core::PluginConnector<'plugin, #data_type>
                 for #wrapper_type #generics {
-                #init_func
+
+                fn init(
+                    &self,
+                    orchestrator: &dyn Orchestrator<'plugin, Vec<u8>>,
+                ) -> Result<()> {
+                    self.0.#init_func_ident(orchestrator)
+                }
+
+                #init_func_ident;
                 #provided_funcs
                 #get_func
             }

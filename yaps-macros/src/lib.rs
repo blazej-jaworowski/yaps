@@ -1,5 +1,6 @@
+use proc_macro2::Span;
 use proc_macro::TokenStream;
-use syn::parse_macro_input;
+use syn::{parse_macro_input, Error};
 
 mod utils;
 mod yaps_plugin;
@@ -34,4 +35,16 @@ pub fn yaps_init(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn yaps_func(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // This attribute is just a marker
     item
+}
+
+#[proc_macro_attribute]
+pub fn yaps_extern_func(_: TokenStream, item: TokenStream) -> TokenStream {
+    // This attribute is just a marker, should be removed during parsing
+    let mut error: TokenStream = Error::new(
+        Span::call_site(),
+        "Invalid yaps_extern_func macro usage"
+    ).to_compile_error().into();
+
+    error.extend(item);
+    error
 }

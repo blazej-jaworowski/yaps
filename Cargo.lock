@@ -125,3 +125,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "yaps-playground"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "yaps-core",
+ "yaps-macros",
+]
