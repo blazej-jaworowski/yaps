@@ -1,38 +1,20 @@
-use proc_macro2::{TokenStream, Span};
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    ItemStruct, Ident, Type, Generics,
+    ItemStruct, Ident, Generics, Type,
     parse::{Parse, ParseStream},
-    Result, Error,
+    Result,
 };
-use crate::utils::MacroArgs;
+use darling::FromMeta;
+use crate::utils::parse_type;
 
+
+#[derive(Debug, FromMeta)]
 pub struct WithSerdeArgs {
+    #[darling(rename = "data", and_then = "parse_type")]
     data_type: Type,
+    #[darling(and_then = "parse_type")]
     serde_type: Type,
-}
-
-impl Parse for WithSerdeArgs {
-
-    fn parse(input: ParseStream) -> Result<Self> {
-        let mut args: MacroArgs<Type> =  input.parse()?;
-
-        let data_type = args.pop_field("data")
-            .ok_or(Error::new(Span::call_site(), "'data' macro field is required"))?;
-
-        let serde_type = args.pop_field("serde_type")
-            .ok_or(Error::new(Span::call_site(), "'serde_type' macro field is required"))?;
-
-        if !args.is_empty() {
-            return Err(Error::new(Span::call_site(), "Unexpected macro args"));
-        }
-
-        Ok(WithSerdeArgs {
-            data_type,
-            serde_type
-        })
-    }
-
 }
 
 pub struct WithSerdeInfo {
