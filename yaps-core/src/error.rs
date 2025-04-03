@@ -1,5 +1,4 @@
-use crate::orchestrator::PluginId;
-use crate::plugin_connector::FunctionId;
+use crate::FunctionId;
 use crate::serde::{Serialize, Deserialize};
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -11,12 +10,6 @@ pub enum Error {
 
     #[error("Function not initialized: {0}")]
     FunctionNotInitialized(FunctionId),
-
-    #[error("Plugin not found: {0}")]
-    PluginNotFound(PluginId),
-
-    #[error("Plugin already registered: {0}")]
-    PluginRegistered(PluginId),
 
     #[error("SerializeError")]
     SerializeError(String),

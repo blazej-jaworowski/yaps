@@ -1,132 +1,79 @@
 use yaps_core::{
-    Result, Error,
-    plugin_connector::WithSerde,
-    orchestrator::{LocalOrchestrator, Orchestrator},
-
-    serde::{Serialize, de::DeserializeOwned},
+    Result,
+    local_orchestrator::LocalOrchestrator,
+    serializer_deserializer::SerializerDeserializer,
+    FuncProvider,
 };
+use yaps_macros::yaps_plugin;
+use yaps_serdes::JsonSerde;
 
-use yaps_macros::{plugin_connector, plugin_func};
+struct Adder;
 
-use std::io::Cursor;
-
-struct TestPlugin;
-
-impl WithSerde<Vec<u8>> for TestPlugin {
-
-    fn serialize<S: Serialize>(&self, obj: S) -> Result<Vec<u8>> {
-        let s = serde_json::to_string(&obj).map_err(|e| {
-            Error::SerializeError(e.to_string())
-        })?;
-        Ok(s.into())
-    }
-
-    fn deserialize<D: DeserializeOwned>(&self, data: Vec<u8>) -> Result<D> {
-        let c = Cursor::new(data);
-        serde_json::from_reader(c).map_err(|e: serde_json::Error| {
-            Error::DeserializeError(e.to_string())
-        })
-    }
-
-}
-
-#[plugin_connector(Vec<u8>)]
-impl TestPlugin {
-
-    #[plugin_func]
-    fn echo(&self, s: String) -> String {
-        s
-    }
-
-    #[plugin_func]
-    fn reverse(&self, s: String) -> String {
-        s.chars().rev().collect()
-    }
-
-    #[plugin_func]
-    fn add(&self, a: i64, b: i64) -> i64 {
+#[yaps_plugin]
+impl Adder {
+    
+    #[yaps_export(id = "Adder::add")]
+    fn add(&self, a: i32, b: i32) -> i32 {
         a + b
     }
 
-    #[plugin_func]
-    fn format(&self, s: String, b: i64) -> String {
-        format!("{s} and {b}")
-    }
-
-    #[plugin_func]
-    fn error(&self) -> std::result::Result<(), String> {
-        Err("Error :(".to_string())
+    #[yaps_export(id = "Adder::sub")]
+    fn sub(&self, a: i32, b: i32) -> i32 {
+        a - b
     }
 
 }
 
-#[test]
-fn string_call_test() -> Result<()> {
-    let mut orchestrator = LocalOrchestrator::<Vec<u8>>::default();
-    let plugin = TestPlugin;
+struct Multiplier;
 
-    orchestrator.register_plugin("Plugin".into(), Box::new(plugin))?;
+#[yaps_plugin]
+impl Multiplier {
+    
+    #[yaps_extern(id = "Adder::add")]
+    fn add(a: i32, b: i32) -> i32;
 
-    let reverse_func = orchestrator.get_func(("Plugin".into(), "reverse".into()))?;
-    let echo_func = orchestrator.get_func(("Plugin".into(), "echo".into()))?;
+    #[yaps_extern(id = "Adder::sub")]
+    fn sub(a: i32, b: i32) -> i32;
 
-    let in_data: Vec<u8> = "\"dupa\"".into();
-    let out_data: Vec<u8> = in_data.clone();
-    let reversed_data: Vec<u8> = in_data.clone().into_iter().rev().collect();
+    #[yaps_export(id = "Multiplier::mult")]
+    fn mult(&self, ext: YapsExtern, a: i32, b: i32) -> Result<i32> {
+        let mut sum = 0;
+        for _ in 0..b {
+            sum = ext.add(sum, a)?;
+        }
+        Ok(sum)
+    }
 
-    assert_eq!((*reverse_func)(in_data.clone())?, reversed_data);
-    assert_eq!((*echo_func)(in_data.clone())?, out_data);
+    #[yaps_export(id = "Multiplier::div")]
+    fn div(&self, ext: YapsExtern, mut a: i32, b: i32) -> Result<i32> {
+        let mut i = 0;
+        while a > 0 {
+            i = ext.add(i, 1)?;
+            a = ext.sub(a, b)?;
+        }
+        Ok(i)
+    }
 
-    Ok(())
 }
 
 #[test]
-fn int_call_test() -> Result<()> {
-    let mut orchestrator = LocalOrchestrator::<Vec<u8>>::default();
-    let plugin = TestPlugin;
+fn single_provider_test() -> Result<()> {
+    let mut orchestrator = LocalOrchestrator::<Vec<u8>>::new();
 
-    orchestrator.register_plugin("Plugin".into(), Box::new(plugin))?;
+    let adder = AdderWrapper::wrap(Adder, JsonSerde);
+    let multiplier = MultiplierWrapper::wrap(Multiplier, JsonSerde);
 
-    let add_func = orchestrator.get_func(("Plugin".into(), "add".into()))?;
+    orchestrator.add_provider(adder)?;
+    orchestrator.add_consumer_provider(multiplier)?;
 
-    let in_data: Vec<u8> = "[1, 2]".into();
-    let out_data: Vec<u8> = "3".into();
+    let func = orchestrator.get_func(&"Multiplier::mult".to_string())?;
 
-    assert_eq!((*add_func)(in_data)?, out_data);
+    let serde = JsonSerde;
+    let data = serde.serialize((12, 3))?;
+    let result = func.call(data)?;
+    let result: Result<i32> = serde.deserialize(result)?;
 
-    Ok(())
-}
-
-#[test]
-fn mixed_call_test() -> Result<()> {
-    let mut orchestrator = LocalOrchestrator::<Vec<u8>>::default();
-    let plugin = TestPlugin;
-
-    orchestrator.register_plugin("Plugin".into(), plugin)?;
-
-    let format_func = orchestrator.get_func(("Plugin".into(), "format".into()))?;
-
-    let in_data: Vec<u8> = "[\":)\", 123]".into();
-    let out_data: Vec<u8> = "\":) and 123\"".into();
-
-    assert_eq!((*format_func)(in_data)?, out_data);
-
-    Ok(())
-}
-
-#[test]
-fn error_test() -> Result<()> {
-    let mut orchestrator = LocalOrchestrator::<Vec<u8>>::default();
-    let plugin = TestPlugin;
-
-    orchestrator.register_plugin("Plugin".into(), plugin)?;
-
-    let error_func = orchestrator.get_func(("Plugin".into(), "error".into()))?;
-
-    let in_data: Vec<u8> = "null".into();
-    let out_data: Vec<u8> = "{\"Err\":\"Error :(\"}".into();
-
-    assert_eq!((*error_func)(in_data)?, out_data);
+    assert_eq!(result, Ok(36));
 
     Ok(())
 }

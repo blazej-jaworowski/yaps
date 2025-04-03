@@ -1,10 +1,13 @@
 pub mod error;
 pub use error::{Result, Error};
 
-pub mod plugin_connector;
-pub use plugin_connector::{FunctionHandle, FunctionId, PluginConnector};
+pub mod consumer_provider;
+pub use consumer_provider::{
+    FunctionId, FunctionHandle,
+    FuncConsumer, FuncProvider,
+};
 
-pub mod orchestrator;
-pub use orchestrator::Orchestrator;
+pub mod local_orchestrator;
+pub mod serializer_deserializer;
 
 pub use serde;

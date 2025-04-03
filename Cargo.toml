@@ -1,5 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "yaps-core", "yaps-macros",
+    "yaps-core",
+    "yaps-macros",
+    "yaps-serdes",
 ]
