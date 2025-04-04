@@ -1,2 +1,2 @@
-pub mod json;
+mod json;
 pub use json::JsonSerde;

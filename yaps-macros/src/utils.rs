@@ -1,3 +1,5 @@
+use proc_macro2::TokenStream;
+use quote::{quote, ToTokens};
 use syn::{
     parse_quote,
     punctuated::Punctuated,
@@ -66,6 +68,14 @@ impl FunctionArgs {
         parse_quote!{ #( #types ),* }
     }
 
+}
+
+pub fn punctuated_into_tuple<T: ToTokens>(mut p: Punctuated<T, Token![,]>) -> TokenStream {
+    if !p.empty_or_trailing() {
+        p.push_punct(parse_quote!{,});
+    }
+
+    quote!{ (#p) }
 }
 
 pub fn ident_to_str(ident: &Ident) -> LitStr {

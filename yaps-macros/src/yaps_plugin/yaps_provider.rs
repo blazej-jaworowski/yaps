@@ -10,7 +10,7 @@ use syn::{
 use super::yaps_export::{ExportFuncs, ExportFunc};
 use super::defs::*;
 
-use crate::utils::FunctionArgs;
+use crate::utils::{self, FunctionArgs};
 
 #[derive(Debug)]
 pub struct YapsProvider {
@@ -31,7 +31,8 @@ impl YapsProvider {
         let args = FunctionArgs::from(Vec::from(args_slice));
 
         let arg_idents = args.to_idents();
-        let arg_types = args.to_types();
+        let arg_idents_tuple = utils::punctuated_into_tuple(arg_idents.clone());
+        let arg_types_tuple = utils::punctuated_into_tuple(args.to_types());
 
         parse_quote! {
             #id_str => Ok(#FunctionHandle::new(move |args| {
@@ -39,7 +40,7 @@ impl YapsProvider {
                 let serde = &self_clone.serde;
                 let inner = &self_clone.inner;
             
-                let (#arg_idents): (#arg_types) = serde.deserialize(args)?;
+                let #arg_idents_tuple: #arg_types_tuple = serde.deserialize(args)?;
                 let result = inner.#ident(#ext_arg #arg_idents);
                 let result = serde.serialize(result)?;
             

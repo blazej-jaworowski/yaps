@@ -65,11 +65,11 @@ impl YapsConsumer {
                 let args = func.args.to_inputs();
                 let ret_type = &func.ret_type;
                 let handle_field = Self::format_handle(ident);
-                let arg_idents = func.args.to_idents();
+                let arg_idents_tuple = utils::punctuated_into_tuple(func.args.to_idents());
 
                 parse_quote! {
                     fn #ident(&self, #args) -> #YapsResult<#ret_type> {
-                        let data = self.serde.serialize((#arg_idents,))?;
+                        let data = self.serde.serialize(#arg_idents_tuple)?;
                         let result = self.#handle_field.call(data)?;
                         self.serde.deserialize(result)
                     }

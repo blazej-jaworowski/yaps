@@ -75,7 +75,7 @@ impl<Data> LocalOrchestrator<Data> {
         Ok(())
     }
 
-    pub fn add_consumer_provider(&mut self, mut cp: impl FuncProvider<Data> + FuncConsumer<Data> + 'static) -> Result<()> {
+    pub fn add_plugin(&mut self, mut cp: impl FuncProvider<Data> + FuncConsumer<Data> + 'static) -> Result<()> {
         self.connect(&cp)?;
         cp.connect(self)?;
 

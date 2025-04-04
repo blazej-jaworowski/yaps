@@ -64,7 +64,7 @@ fn single_provider_test() -> Result<()> {
     let multiplier = MultiplierWrapper::wrap(Multiplier, JsonSerde);
 
     orchestrator.add_provider(adder)?;
-    orchestrator.add_consumer_provider(multiplier)?;
+    orchestrator.add_plugin(multiplier)?;
 
     let func = orchestrator.get_func(&"Multiplier::mult".to_string())?;
 
