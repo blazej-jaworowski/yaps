@@ -1,8 +1,9 @@
 use proc_macro2::TokenStream;
+use quote::ToTokens;
 use syn::{
     parse,
     parse_quote,
-    ItemImpl,
+    ItemImpl, ImplItemFn,
     TraitItemFn,
     ReturnType,
     Ident, Type,
@@ -45,6 +46,12 @@ impl ExternFuncs {
 }
 
 impl VisitMut for ExternFuncs {
+
+    fn visit_impl_item_fn_mut(&mut self, item: &mut ImplItemFn) {
+        let mut stream = item.to_token_stream();
+        self.visit_token_stream_mut(&mut stream);
+        // TODO: We need to remove this node somehow
+    }
 
     fn visit_token_stream_mut(&mut self, item: &mut TokenStream) {
         let func: TraitItemFn = match parse(item.clone().into()) {

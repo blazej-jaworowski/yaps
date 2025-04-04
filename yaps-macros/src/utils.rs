@@ -24,6 +24,8 @@ impl From<&Signature> for FunctionArgs {
             })
             .filter_map(|pat_type| {
                 match &*pat_type.pat {
+                    // TODO: add support
+                    //Pat::Wild(_) => { /* ... */ },
                     Pat::Ident(pat_ident) => {
                         let arg_ident = pat_ident.ident.clone();
                         let arg_type = (*pat_type.ty).clone();

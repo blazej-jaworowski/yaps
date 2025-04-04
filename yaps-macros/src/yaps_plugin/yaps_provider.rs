@@ -39,7 +39,7 @@ impl YapsProvider {
                 let serde = &self_clone.serde;
                 let inner = &self_clone.inner;
             
-                let (#arg_idents,): (#arg_types,) = serde.deserialize(args)?;
+                let (#arg_idents): (#arg_types) = serde.deserialize(args)?;
                 let result = inner.#ident(#ext_arg #arg_idents);
                 let result = serde.serialize(result)?;
             
