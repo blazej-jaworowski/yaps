@@ -45,7 +45,7 @@ impl From<&Signature> for FunctionArgs {
 impl From<Vec<(Ident, Type)>> for FunctionArgs {
     
     fn from(vec: Vec<(Ident, Type)>) -> Self {
-        Self(Vec::from(vec))
+        Self(vec)
     }
 
 }

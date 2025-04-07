@@ -64,6 +64,10 @@ impl VisitMut for ExternFuncs {
             None => return,
         };
 
+        if func.sig.asyncness.is_none() {
+            abort!(func.sig, "Extern funcs are inherently async, you need to declare them as such");
+        }
+
         let attr_args = match ExternFuncArgs::from_meta(&attr.meta) {
             Ok(a) => a,
             Err(_) => abort!(attr, "Invalid yaps_extern args"),

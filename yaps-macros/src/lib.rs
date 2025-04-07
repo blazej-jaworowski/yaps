@@ -5,7 +5,6 @@ use syn::{
 };
 use proc_macro_error::proc_macro_error;
 
-
 #[macro_use]
 mod utils;
 mod yaps_plugin;

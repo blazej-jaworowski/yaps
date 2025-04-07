@@ -34,10 +34,13 @@ fn generate_wrapper(inner_type: &Type, extra_fields: &TokenStream) -> ItemStruct
     let wrapper_name = wrapper_name(inner_type);
 
     parse_quote! {
-        struct #wrapper_name<Data, Serde: #SerializerDeserializer<Data>> {
-            _marker: ::std::marker::PhantomData<Data>,
+        struct #wrapper_name<D: #YapsData, SD: #SerializerDeserializer<D>> {
+            // TODO: Not sure this is the idiomatic way to do this.
+            //       Cannot do PhantomData<Data>, because it causes the wrapper type to not
+            //       be Send and Sync.
+            _marker: ::std::marker::PhantomData<dyn Fn(D) + Send + Sync>,
             inner: #inner_type,
-            serde: Serde,
+            serde: SD,
         
             #extra_fields
         }
@@ -49,9 +52,9 @@ fn generate_wrapper_wrap(inner_type: &Type, extra_field_init: &Punctuated<FieldV
     let wrapper_ref_name = wrapper_ref_name(inner_type);
 
     parse_quote! {
-        impl<Data, Serde: #SerializerDeserializer<Data>> #wrapper_name<Data, Serde> {
+        impl<D: #YapsData, SD: #SerializerDeserializer<D>> #wrapper_name<D, SD> {
         
-            fn wrap(inner: #inner_type, serde: Serde) -> #wrapper_ref_name<Data, Serde> {
+            fn wrap(inner: #inner_type, serde: SD) -> #wrapper_ref_name<D, SD> {
                 let wrapper = #wrapper_name {
                     _marker: std::marker::PhantomData,
                     inner,
@@ -59,7 +62,7 @@ fn generate_wrapper_wrap(inner_type: &Type, extra_field_init: &Punctuated<FieldV
         
                     #extra_field_init
                 };
-                #wrapper_ref_name(#Rc::new(#RefCell::new(wrapper)))
+                #wrapper_ref_name(#Arc::new(wrapper))
             }
         
         }
@@ -88,7 +91,7 @@ pub fn process_yaps_plugin(item: &mut ItemImpl) -> TokenStream {
     quote! {
         #item
 
-        struct #wrapper_ref_ident<Data, Serde: #SerializerDeserializer<Data>>(#Rc<#RefCell<#wrapper_ident<Data, Serde>>>);
+        struct #wrapper_ref_ident<D: #YapsData, SD: #SerializerDeserializer<D>>(#Arc<#wrapper_ident<D, SD>>);
 
         #wrapper
         #wrapper_wrap

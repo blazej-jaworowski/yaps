@@ -1,36 +1,62 @@
 use crate::{Result, Error};
 use crate::{
     FunctionId, FunctionHandle, 
+    YapsData,
     FuncProvider, FuncConsumer,
 };
 
-use std::{
-    rc::Rc,
-    cell::RefCell,
-};
+use std::sync::Arc;
+
+use futures::future::join_all;
+use tokio::sync::Mutex;
+use async_trait::async_trait;
 
 
-pub struct LocalOrchestrator<Data> {
+pub struct LocalOrchestrator<D: YapsData> {
 
-    providers: Vec<Rc<RefCell<dyn FuncProvider<Data>>>>,
-    consumers: Vec<Rc<RefCell<dyn FuncConsumer<Data>>>>,
+    providers: Vec<Arc<Mutex<dyn FuncProvider<D>>>>,
+    consumers: Vec<Arc<Mutex<dyn FuncConsumer<D>>>>,
 
 }
 
-impl<Data> FuncProvider<Data> for LocalOrchestrator<Data> {
+#[async_trait]
+impl<D: YapsData> FuncProvider<D> for LocalOrchestrator<D> {
     
-    fn provided_funcs(&self) -> Result<Vec<FunctionId>> {
-        Ok(self.providers.iter()
-            .filter_map(|p| p.borrow().provided_funcs().ok())
+    async fn provided_funcs(&self) -> Result<Vec<FunctionId>> {
+        let provided_funcs = self.providers.iter()
+            .map(|p| async {
+                p.lock().await.provided_funcs().await
+            });
+
+        let provided_funcs = join_all(provided_funcs).await;
+
+        let provided_funcs: Vec<_> = provided_funcs.into_iter()
+            .filter_map(|res| res.ok())
             .flatten()
-            .collect())
+            .collect();
+
+        Ok(provided_funcs)
     }
 
-    fn get_func(&self, id: &FunctionId) -> Result<FunctionHandle<Data>> {
-        let providers: Vec<_> = self.providers.iter()
-            .filter(|p| p.borrow().provided_funcs()
-                .is_ok_and(|p| p.contains(id)))
+    async fn get_func(&self, id: &FunctionId) -> Result<FunctionHandle<D>> {
+        let providers = self.providers.iter()
+            .map(|p| async {
+                let funcs = p.lock().await.provided_funcs().await;
+                (p.clone(), funcs)
+            });
+
+        let providers = join_all(providers).await;
+
+        let providers: Vec<_> = providers.into_iter()
+            .filter_map(|(p, res)| {
+                if res.is_ok_and(|r| r.contains(id)) {
+                    Some(p)
+                } else {
+                    None
+                }
+            })
             .collect();
+
 
         if providers.is_empty() {
             return Err(Error::FunctionNotFound(id.into()));
@@ -38,48 +64,51 @@ impl<Data> FuncProvider<Data> for LocalOrchestrator<Data> {
 
         // TODO: Maybe handle a case where there are multiple plugins
 
-        providers[0].borrow().get_func(id)
+        let func = providers[0].lock().await.get_func(id).await;
+        func
     }
 
 }
 
-impl<Data> FuncConsumer<Data> for LocalOrchestrator<Data> {
+#[async_trait]
+impl<D: YapsData> FuncConsumer<D> for LocalOrchestrator<D> {
 
-    fn connect(&mut self, provider: &dyn FuncProvider<Data>) -> Result<()> {
-        self.consumers.iter_mut()
-            .for_each(|c| {
-                c.borrow_mut().connect(provider).expect("TODO: handle later")
-            });
+    async fn connect(&mut self, provider: &dyn FuncProvider<D>) -> Result<()> {
+        let results = self.consumers.iter_mut()
+            .map(|c| async { c.lock().await.connect(provider).await });
+
+        join_all(results).await;
+
         Ok(())
     }
 
 }
 
-impl<Data> LocalOrchestrator<Data> {
+impl<D: YapsData> LocalOrchestrator<D> {
 
     pub fn new() -> Self {
         Self { providers: Vec::new(), consumers: Vec::new() }
     }
 
-    pub fn add_provider(&mut self, provider: impl FuncProvider<Data> + 'static) -> Result<()> {
-        self.connect(&provider)?;
+    pub async fn add_provider(&mut self, provider: impl FuncProvider<D> + 'static) -> Result<()> {
+        self.connect(&provider).await?;
 
-        self.providers.push(Rc::new(RefCell::new(provider)));
+        self.providers.push(Arc::new(Mutex::new(provider)));
         Ok(())
     }
 
-    pub fn add_consumer(&mut self, mut consumer: impl FuncConsumer<Data> + 'static) -> Result<()> {
-        consumer.connect(self)?;
+    pub async fn add_consumer(&mut self, mut consumer: impl FuncConsumer<D> + 'static) -> Result<()> {
+        consumer.connect(self).await?;
 
-        self.consumers.push(Rc::new(RefCell::new(consumer)));
+        self.consumers.push(Arc::new(Mutex::new(consumer)));
         Ok(())
     }
 
-    pub fn add_plugin(&mut self, mut cp: impl FuncProvider<Data> + FuncConsumer<Data> + 'static) -> Result<()> {
-        self.connect(&cp)?;
-        cp.connect(self)?;
+    pub async fn add_plugin(&mut self, mut cp: impl FuncProvider<D> + FuncConsumer<D> + 'static) -> Result<()> {
+        self.connect(&cp).await?;
+        cp.connect(self).await?;
 
-        let cp = Rc::new(RefCell::new(cp));
+        let cp = Arc::new(Mutex::new(cp));
 
         self.providers.push(cp.clone());
         self.consumers.push(cp);

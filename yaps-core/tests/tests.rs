@@ -30,47 +30,47 @@ struct Multiplier;
 impl Multiplier {
     
     #[yaps_extern(id = "Adder::add")]
-    fn add(a: i32, b: i32) -> i32;
+    async fn add(a: i32, b: i32) -> i32;
 
     #[yaps_extern(id = "Adder::sub")]
-    fn sub(a: i32, b: i32) -> i32;
+    async fn sub(a: i32, b: i32) -> i32;
 
     #[yaps_export(id = "Multiplier::mult")]
-    fn mult(&self, ext: YapsExtern, a: i32, b: i32) -> Result<i32> {
+    async fn mult(&self, ext: YapsExtern, a: i32, b: i32) -> Result<i32> {
         let mut sum = 0;
         for _ in 0..b {
-            sum = ext.add(sum, a)?;
+            sum = ext.add(sum, a).await?;
         }
         Ok(sum)
     }
 
     #[yaps_export(id = "Multiplier::div")]
-    fn div(&self, ext: YapsExtern, mut a: i32, b: i32) -> Result<i32> {
+    async fn div(&self, ext: YapsExtern, mut a: i32, b: i32) -> Result<i32> {
         let mut i = 0;
         while a > 0 {
-            i = ext.add(i, 1)?;
-            a = ext.sub(a, b)?;
+            i = ext.add(i, 1).await?;
+            a = ext.sub(a, b).await?;
         }
         Ok(i)
     }
 
 }
 
-#[test]
-fn single_provider_test() -> Result<()> {
+#[tokio::test]
+async fn single_provider_test() -> Result<()> {
     let mut orchestrator = LocalOrchestrator::<Vec<u8>>::new();
 
     let adder = AdderWrapper::wrap(Adder, JsonSerde);
     let multiplier = MultiplierWrapper::wrap(Multiplier, JsonSerde);
 
-    orchestrator.add_provider(adder)?;
-    orchestrator.add_plugin(multiplier)?;
+    orchestrator.add_provider(adder).await?;
+    orchestrator.add_plugin(multiplier).await?;
 
-    let func = orchestrator.get_func(&"Multiplier::mult".to_string())?;
+    let func = orchestrator.get_func(&"Multiplier::mult".to_string()).await?;
 
     let serde = JsonSerde;
     let data = serde.serialize((12, 3))?;
-    let result = func.call(data)?;
+    let result = func.call(data).await?;
     let result: Result<i32> = serde.deserialize(result)?;
 
     assert_eq!(result, Ok(36));

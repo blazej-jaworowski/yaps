@@ -45,12 +45,13 @@ impl YapsConsumer {
                 let ret_type = &func.ret_type;
 
                 parse_quote! {
-                    fn #ident(&self, #args) -> #YapsResult<#ret_type>;
+                    async fn #ident(&self, #args) -> #YapsResult<#ret_type>;
                 }
             });
         let ident = &self.extern_trait_ident;
 
         parse_quote! {
+            #[#async_trait]
             trait #ident {
                 #( #funcs )*
             }
@@ -68,15 +69,16 @@ impl YapsConsumer {
                 let arg_idents_tuple = utils::punctuated_into_tuple(func.args.to_idents());
 
                 parse_quote! {
-                    fn #ident(&self, #args) -> #YapsResult<#ret_type> {
+                    async fn #ident(&self, #args) -> #YapsResult<#ret_type> {
                         let data = self.serde.serialize(#arg_idents_tuple)?;
-                        let result = self.#handle_field.call(data)?;
+                        let result = self.#handle_field.read().await.call(data).await?;
                         self.serde.deserialize(result)
                     }
                 }
             });
         parse_quote! {
-            impl<Data, Serde: #SerializerDeserializer<Data>> #extern_trait_ident for #for_type<Data, Serde> {
+            #[#async_trait]
+            impl<D: #YapsData, SD: #SerializerDeserializer<D>> #extern_trait_ident for #for_type<D, SD> {
                 #( #func_defs )*
             }
         }
@@ -89,16 +91,17 @@ impl YapsConsumer {
                 let handle_field = Self::format_handle(&func.ident);
 
                 parse_quote! {
-                    if let Ok(func) = provider.get_func(&#id_str.into()) {
-                        self.0.borrow_mut().#handle_field = func;
+                    if let Ok(func) = provider.get_func(&#id_str.into()).await {
+                        *self.0.#handle_field.write().await = func;
                     }
                 }
             });
     
         parse_quote! {
-            impl<Data, Serde: #SerializerDeserializer<Data>> #FuncConsumer<Data> for #for_type<Data, Serde> {
+            #[#async_trait]
+            impl<D: #YapsData, SD: #SerializerDeserializer<D>> #FuncConsumer<D> for #for_type<D, SD> {
             
-                fn connect(&mut self, provider: &dyn #FuncProvider<Data>) -> #YapsResult<()> {
+                async fn connect(&mut self, provider: &dyn #FuncProvider<D>) -> #YapsResult<()> {
                     #( #funcs_init )*
                     Ok(())
                 }
@@ -112,7 +115,10 @@ impl YapsConsumer {
             .map(|func| {
                 let handle_ident = Self::format_handle(&func.ident);
                 quote! {
-                    #handle_ident: #FunctionHandle<Data>
+                    // TODO: Putting a RwLock here might hurt performance,
+                    //       This field is mostly only set once, so there might be a
+                    //       better solution.
+                    #handle_ident: #RwLock<#FunctionHandle<D>>
                 }
             });
         quote! {
@@ -126,9 +132,9 @@ impl YapsConsumer {
                 let handle_ident = Self::format_handle(&func.ident);
                 let func_str = utils::ident_to_str(&func.ident);
                 parse_quote! {
-                    #handle_ident: #FunctionHandle::new(|_| {
+                    #handle_ident: #RwLock::new(#FunctionHandle::new(|_| Box::pin(async {
                         Err(#YapsError::FunctionNotInitialized(#func_str.into()))
-                    })
+                    })))
                 }
             });
         parse_quote! {

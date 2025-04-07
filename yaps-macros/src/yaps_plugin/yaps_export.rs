@@ -17,6 +17,7 @@ pub struct ExportFuncArgs {
 
 #[derive(Debug)]
 pub struct ExportFunc {
+    pub is_async: bool,
     pub ident: Ident,
     pub args: FunctionArgs,
     pub id: String,
@@ -41,6 +42,7 @@ impl VisitMut for ExportFuncs {
         };
 
         self.funcs.push(ExportFunc {
+            is_async: item.sig.asyncness.is_some(),
             ident: item.sig.ident.clone(),
             args: FunctionArgs::from(&item.sig),
             id: export_args.id,

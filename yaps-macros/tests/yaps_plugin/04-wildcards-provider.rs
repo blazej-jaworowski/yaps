@@ -3,11 +3,12 @@ use yaps_serdes::JsonSerde;
 
 use yaps_core::{
     FuncConsumer, FuncProvider,
+    YapsData,
 };
 
 
-fn check_provider<Data>(_: &impl FuncProvider<Data>) {}
-fn check_consumer<Data>(_: &impl FuncConsumer<Data>) {}
+fn check_provider<Data: YapsData>(_: &impl FuncProvider<Data>) {}
+fn check_consumer<Data: YapsData>(_: &impl FuncConsumer<Data>) {}
 
 
 struct TestStruct;
@@ -21,6 +22,7 @@ impl TestStruct {
 }
 
 
+#[tokio::main]
 fn main() {
 
     let test_struct = TestStruct;
@@ -29,7 +31,7 @@ fn main() {
     check_provider(&wrapper);
     check_consumer(&wrapper);
 
-    let funcs = wrapper.provided_funcs()
+    let funcs = wrapper.provided_funcs().await
         .expect("Unexpected provided_funcs error");
 
     assert_eq!(funcs, vec!["provide_test_func"]);

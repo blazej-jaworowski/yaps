@@ -3,11 +3,12 @@ use yaps_serdes::JsonSerde;
 
 use yaps_core::{
     FuncConsumer, FuncProvider,
+    YapsData,
 };
 
 
-fn check_provider<Data>(_: &impl FuncProvider<Data>) {}
-fn check_consumer<Data>(_: &impl FuncConsumer<Data>) {}
+fn check_provider<Data: YapsData>(_: &impl FuncProvider<Data>) {}
+fn check_consumer<Data: YapsData>(_: &impl FuncConsumer<Data>) {}
 
 
 struct TestStruct;

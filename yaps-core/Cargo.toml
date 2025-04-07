@@ -4,9 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-yaps-macros = { path = "../yaps-macros" }
 thiserror = "2.0.12"
 serde = { version = "1.0.219", features = ["derive"] }
+async-trait = "0.1.88"
+tokio = { version = "1.44.1", features = ["full"] } # TODO: we don't need all features
+futures = "0.3.31"
 
 [dev-dependencies]
+yaps-macros = { path = "../yaps-macros" }
 yaps-serdes = { path = "../yaps-serdes" }

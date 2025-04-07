@@ -32,10 +32,12 @@ macro_rules! define_const_token_streams {
     }
 }
 
+
 define_const_token_streams! {
 
-    Rc = { ::std::rc::Rc };
-    RefCell = { ::std::cell::RefCell };
+    Arc = { ::std::sync::Arc };
+    RwLock = { ::tokio::sync::RwLock };
+    async_trait = { ::yaps_core::async_trait::async_trait };
 
     SerializerDeserializer = { ::yaps_core::serializer_deserializer::SerializerDeserializer };
     FuncProvider = { ::yaps_core::consumer_provider::FuncProvider };
@@ -44,5 +46,7 @@ define_const_token_streams! {
     FunctionHandle = { ::yaps_core::consumer_provider::FunctionHandle };
     YapsError = { ::yaps_core::Error };
     YapsResult = { ::yaps_core::Result };
+
+    YapsData = { ::yaps_core::YapsData };
 
 }
