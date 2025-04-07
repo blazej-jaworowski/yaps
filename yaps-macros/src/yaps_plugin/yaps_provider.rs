@@ -19,7 +19,7 @@ pub struct YapsProvider {
 
 impl YapsProvider {
 
-    fn generate_match_arm(&self, func: &ExportFunc, extern_arg_funcs: &Vec<Ident>) -> Arm {
+    fn generate_match_arm(&self, func: &ExportFunc, extern_arg_funcs: &[Ident]) -> Arm {
         let id_str = LitStr::new(&func.id, Span::call_site());
         let ident = &func.ident;
 
@@ -57,7 +57,7 @@ impl YapsProvider {
         }
     }
 
-    fn generate_provider_impl(&self, wrapper_ref: &Ident, extern_arg_funcs: &Vec<Ident>) -> ItemImpl {
+    fn generate_provider_impl(&self, wrapper_ref: &Ident, extern_arg_funcs: &[Ident]) -> ItemImpl {
         let provided_funcs_str = self.export_funcs.funcs.iter()
             .map(|func| LitStr::new(&func.id, Span::call_site()));
 
@@ -86,7 +86,7 @@ impl YapsProvider {
         }
     }
 
-    pub fn generate_code(&self, wrapper_ref: &Ident, extern_arg_funcs: &Vec<Ident>) -> TokenStream {
+    pub fn generate_code(&self, wrapper_ref: &Ident, extern_arg_funcs: &[Ident]) -> TokenStream {
         let provider_impl = self.generate_provider_impl(wrapper_ref, extern_arg_funcs);
         quote! {
             #provider_impl

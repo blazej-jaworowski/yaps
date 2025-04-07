@@ -56,7 +56,7 @@ fn generate_wrapper_wrap(inner_type: &Type, extra_field_init: &Punctuated<FieldV
         
             fn wrap(inner: #inner_type, serde: SD) -> #wrapper_ref_name<D, SD> {
                 let wrapper = #wrapper_name {
-                    _marker: std::marker::PhantomData,
+                    _marker: ::std::marker::PhantomData,
                     inner,
                     serde,
         
@@ -82,8 +82,8 @@ pub fn process_yaps_plugin(item: &mut ItemImpl) -> TokenStream {
     let extra_wrapper_field_init = consumer.generate_handle_fields_init();
     let extern_arg_funcs = &consumer.extern_arg_funcs;
 
-    let wrapper = generate_wrapper(&inner_type, &extra_wrapper_fields);
-    let wrapper_wrap = generate_wrapper_wrap(&inner_type, &extra_wrapper_field_init);
+    let wrapper = generate_wrapper(inner_type, &extra_wrapper_fields);
+    let wrapper_wrap = generate_wrapper_wrap(inner_type, &extra_wrapper_field_init);
 
     let consumer_code = consumer.generate_code(&wrapper_ident, &wrapper_ref_ident);
     let provider_code = provider.generate_code(&wrapper_ref_ident, extern_arg_funcs);

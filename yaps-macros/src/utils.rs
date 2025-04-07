@@ -90,12 +90,12 @@ pub fn get_type_ident(ty: &Type) -> Option<&Ident> {
     }
 }
 
-pub fn get_attr<'a>(attributes: &'a Vec<Attribute>, ident: &str) -> Option<&'a Attribute> {
+pub fn get_attr<'a>(attributes: &'a [Attribute], ident: &str) -> Option<&'a Attribute> {
     attributes.iter().find(|attr| attr.path().is_ident(ident))
 }
 
 pub fn pop_attr(attributes: &mut Vec<Attribute>, ident: &str) -> Option<Attribute> {
-    let attr = match get_attr(&attributes, ident) {
+    let attr = match get_attr(attributes, ident) {
         Some(a) => a.clone(),
         None => return None,
     };

@@ -19,6 +19,12 @@ pub struct LocalOrchestrator<D: YapsData> {
 
 }
 
+impl<D: YapsData> Default for LocalOrchestrator<D> {
+    fn default() -> Self {
+        Self { providers: Vec::new(), consumers: Vec::new() }
+    }
+}
+
 #[async_trait]
 impl<D: YapsData> FuncProvider<D> for LocalOrchestrator<D> {
     
@@ -64,8 +70,8 @@ impl<D: YapsData> FuncProvider<D> for LocalOrchestrator<D> {
 
         // TODO: Maybe handle a case where there are multiple plugins
 
-        let func = providers[0].lock().await.get_func(id).await;
-        func
+        let provider = providers[0].lock().await;
+        provider.get_func(id).await
     }
 
 }
@@ -87,7 +93,7 @@ impl<D: YapsData> FuncConsumer<D> for LocalOrchestrator<D> {
 impl<D: YapsData> LocalOrchestrator<D> {
 
     pub fn new() -> Self {
-        Self { providers: Vec::new(), consumers: Vec::new() }
+        Self::default()
     }
 
     pub async fn add_provider(&mut self, provider: impl FuncProvider<D> + 'static) -> Result<()> {

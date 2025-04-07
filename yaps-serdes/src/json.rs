@@ -1,4 +1,3 @@
-use serde_json;
 use serde::{Serialize, de::DeserializeOwned};
 use yaps_core::{
     Result, Error,
