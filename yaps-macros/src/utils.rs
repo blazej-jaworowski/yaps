@@ -1,28 +1,20 @@
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use syn::{
-    parse_quote,
-    punctuated::Punctuated,
-    Token,
-    Ident, Type,
-    LitStr,
-    Signature, Attribute,
-    FnArg, Pat,
+    Attribute, FnArg, Ident, Pat, Signature, Token, Type, parse_quote, punctuated::Punctuated,
 };
-
 
 #[derive(Debug, Clone)]
 pub struct FunctionArgs(pub Vec<(Ident, Type)>);
 
 impl From<&Signature> for FunctionArgs {
-    
     fn from(sig: &Signature) -> Self {
-        let args_vec = sig.inputs.iter()
-            .filter_map(|input| {
-                match input {
-                    FnArg::Typed(t) => Some(t),
-                    _ => None,
-                }
+        let args_vec = sig
+            .inputs
+            .iter()
+            .filter_map(|input| match input {
+                FnArg::Typed(t) => Some(t),
+                _ => None,
             })
             .filter_map(|pat_type| {
                 match &*pat_type.pat {
@@ -32,49 +24,39 @@ impl From<&Signature> for FunctionArgs {
                         let arg_ident = pat_ident.ident.clone();
                         let arg_type = (*pat_type.ty).clone();
                         Some((arg_ident, arg_type))
-                    },
+                    }
                     _ => None,
                 }
             })
             .collect();
         Self(args_vec)
     }
-
 }
 
 impl From<Vec<(Ident, Type)>> for FunctionArgs {
-    
     fn from(vec: Vec<(Ident, Type)>) -> Self {
         Self(vec)
     }
-
 }
 
 impl FunctionArgs {
-
     pub fn to_idents(&self) -> Punctuated<Ident, Token![,]> {
         let idents = self.0.iter().map(|(ident, _)| ident);
-        parse_quote!{ #( #idents ),* }
+        parse_quote! { #( #idents ),* }
     }
 
     pub fn to_types(&self) -> Punctuated<Type, Token![,]> {
         let types = self.0.iter().map(|(_, ty)| ty);
-        parse_quote!{ #( #types ),* }
+        parse_quote! { #( #types ),* }
     }
-
 }
 
 pub fn punctuated_into_tuple<T: ToTokens>(mut p: Punctuated<T, Token![,]>) -> TokenStream {
     if !p.empty_or_trailing() {
-        p.push_punct(parse_quote!{,});
+        p.push_punct(parse_quote! {,});
     }
 
-    quote!{ (#p) }
-}
-
-pub fn ident_to_str(ident: &Ident) -> LitStr {
-    let s = ident.to_string();
-    LitStr::new(&s, ident.span())
+    quote! { (#p) }
 }
 
 pub fn get_attr<'a>(attributes: &'a [Attribute], ident: &str) -> Option<&'a Attribute> {

@@ -1,12 +1,9 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Ident, ImplItemFn, ItemImpl, ItemStruct, parse_quote};
+use syn::{Ident, ImplItemFn, ItemImpl, ItemStruct, LitStr, parse_quote};
 
 use super::{yaps_extern::ExternFunc, yaps_plugin_macro::YapsPluginInfo};
-use crate::{
-    defs::*,
-    utils::{self, ident_to_str},
-};
+use crate::{defs::*, utils};
 
 fn wrapper_name(struct_name: &Ident) -> Ident {
     format_ident!("{}Wrapper", struct_name)
@@ -121,14 +118,14 @@ pub(crate) fn generate_wrapper_impl(info: &YapsPluginInfo) -> ItemImpl {
 fn generate_wrapper_extern_func_impl(func: &ExternFunc) -> ImplItemFn {
     let sig = &func.sig;
     let field_name = extern_field_name(&func.ident);
-    let func_str = ident_to_str(&func.ident);
+    let id_str = LitStr::new(&func.id, func.ident.span());
 
     parse_quote! {
         #sig {
             let func = self
                 .#field_name
                 .get()
-                .ok_or(#Error::FunctionNotInitialized(#func_str.to_string()))?;
+                .ok_or(#Error::FunctionNotInitialized(#id_str.to_string()))?;
 
             func.call_with_codec(self.codec.as_ref(), (s,)).await
         }

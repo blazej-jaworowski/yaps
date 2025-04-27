@@ -17,6 +17,7 @@ use super::{
 #[derive(FromMeta, Debug)]
 struct YapsPluginArgs {
     pub struct_name: Option<String>,
+    pub plugin_name: Option<String>,
 }
 
 fn get_plugin_struct<'a>(
@@ -129,8 +130,10 @@ pub(crate) fn process_yaps_module(module: &mut ItemMod, args_meta: &Meta) {
         }
     }
 
-    // TODO: make this customizable
-    plugin_info.plugin_name = plugin_info.struct_ident.to_string();
+    plugin_info.plugin_name = match args.plugin_name {
+        Some(n) => n,
+        None => plugin_info.struct_ident.to_string(),
+    };
 
     content.push(Item::Trait(generate_extern_trait(&plugin_info)));
     content.push(Item::Impl(generate_extern_funcs_inner_impl(&plugin_info)));
