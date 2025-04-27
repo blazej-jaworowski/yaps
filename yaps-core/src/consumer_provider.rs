@@ -4,9 +4,6 @@ use async_trait::async_trait;
 
 pub trait YapsData: Send + 'static {}
 
-impl YapsData for Vec<u8> {}
-impl YapsData for String {}
-
 #[derive(Debug, Clone)]
 pub struct FuncMetadata {
     pub id: String,
