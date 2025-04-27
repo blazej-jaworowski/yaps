@@ -1,5 +1,5 @@
 use proc_macro2::Span;
-use syn::{Generics, Ident, Item, ItemImpl, ItemMod, ItemStruct, Meta, Type};
+use syn::{Generics, Ident, Item, ItemImpl, ItemMod, ItemStruct, Meta, Type, parse_quote};
 
 use darling::FromMeta;
 use proc_macro_error::abort;
@@ -78,6 +78,14 @@ fn get_plugin_impls<'a>(content: &'a mut [Item], struct_ident: &Ident) -> Vec<&'
         .collect()
 }
 
+fn generate_imports() -> Item {
+    parse_quote! {
+        use ::yaps_core::{
+            FuncHandle as _,
+        };
+    }
+}
+
 pub(crate) struct YapsPluginInfo {
     pub struct_ident: Ident,
     pub struct_generics: Generics,
@@ -134,6 +142,8 @@ pub(crate) fn process_yaps_module(module: &mut ItemMod, args_meta: &Meta) {
         Some(n) => n,
         None => plugin_info.struct_ident.to_string(),
     };
+
+    content.insert(0, generate_imports());
 
     content.push(Item::Trait(generate_extern_trait(&plugin_info)));
     content.push(Item::Impl(generate_extern_funcs_inner_impl(&plugin_info)));
