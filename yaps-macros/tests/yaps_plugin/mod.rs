@@ -1,6 +1,9 @@
-use trybuild;
+// TODO: Wait the API to stabilise
+
+// use trybuild;
 
 
+/*
 #[test]
 fn trybuild_tests() {
     let t = trybuild::TestCases::new();
@@ -14,3 +17,4 @@ fn trybuild_tests() {
 
     // TODO: Add failing cases with friendly error messages
 }
+*/

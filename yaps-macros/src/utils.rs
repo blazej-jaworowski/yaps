@@ -52,12 +52,6 @@ impl From<Vec<(Ident, Type)>> for FunctionArgs {
 
 impl FunctionArgs {
 
-    pub fn to_inputs(&self) -> Punctuated<FnArg, Token![,]> {
-        let fn_args = self.0.iter()
-            .map(|(ident, ty)| -> FnArg { parse_quote!{ #ident: #ty } });
-        parse_quote!{ #( #fn_args ),* }
-    }
-
     pub fn to_idents(&self) -> Punctuated<Ident, Token![,]> {
         let idents = self.0.iter().map(|(ident, _)| ident);
         parse_quote!{ #( #idents ),* }
@@ -83,13 +77,6 @@ pub fn ident_to_str(ident: &Ident) -> LitStr {
     LitStr::new(&s, ident.span())
 }
 
-pub fn get_type_ident(ty: &Type) -> Option<&Ident> {
-    match ty {
-        Type::Path(p) => p.path.get_ident(),
-        _ => None,
-    }
-}
-
 pub fn get_attr<'a>(attributes: &'a [Attribute], ident: &str) -> Option<&'a Attribute> {
     attributes.iter().find(|attr| attr.path().is_ident(ident))
 }
@@ -103,12 +90,4 @@ pub fn pop_attr(attributes: &mut Vec<Attribute>, ident: &str) -> Option<Attribut
     attributes.retain(|attr| !attr.path().is_ident(ident));
 
     Some(attr)
-}
-
-macro_rules! format_ident {
-    ($format:literal, $ident:expr) => {{
-        let s = $ident.to_string();
-        let s = format!($format, s);
-        syn::Ident::new(&s, $ident.span())
-    }}
 }

@@ -1,15 +1,15 @@
 [package]
 name = "yaps-core"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 thiserror = "2.0.12"
-serde = { version = "1.0.219", features = ["derive"] }
 async-trait = "0.1.88"
 tokio = { version = "1.44.1", features = ["full"] } # TODO: we don't need all features
 futures = "0.3.31"
+serde = { version = "1.0.219", features = ["derive"] }
 
 [dev-dependencies]
 yaps-macros = { path = "../yaps-macros" }
-yaps-serdes = { path = "../yaps-serdes" }
+yaps-codecs = { path = "../yaps-codecs" }

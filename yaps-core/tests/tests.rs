@@ -5,7 +5,7 @@ use yaps_core::{
     FuncProvider,
 };
 use yaps_macros::yaps_plugin;
-use yaps_serdes::JsonSerde;
+use yaps_codecs::JsonCodec;
 
 struct Adder;
 

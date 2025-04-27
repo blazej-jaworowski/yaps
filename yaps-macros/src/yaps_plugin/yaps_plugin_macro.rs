@@ -1,102 +1,144 @@
-use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{
-    parse_quote,
-    Token,
-    Type, Ident,
-    ItemImpl, ItemStruct,
-    FieldValue,
-    punctuated::Punctuated,
-    spanned::Spanned,
+use proc_macro2::Span;
+use syn::{Generics, Ident, Item, ItemImpl, ItemMod, ItemStruct, Meta, Type};
+
+use darling::FromMeta;
+use proc_macro_error::abort;
+
+use super::{
+    yaps_consumer_provider::{generate_consumer_impl, generate_provider_impl},
+    yaps_export::ExportFunc,
+    yaps_extern::ExternFunc,
+    yaps_extern_trait::*,
+    yaps_impl::process_impl,
+    yaps_struct::process_struct,
+    yaps_wrapper::*,
 };
 
-use crate::utils;
-
-use super::yaps_consumer::YapsConsumer;
-use super::yaps_provider::YapsProvider;
-use super::defs::*;
-
-fn wrapper_name(inner_type: &Type) -> Ident {
-    match utils::get_type_ident(inner_type) {
-        Some(i) => format_ident!("{}Wrapper", i),
-        None => Ident::new("YapsWrapper", inner_type.span()),
-    }
+#[derive(FromMeta, Debug)]
+struct YapsPluginArgs {
+    pub struct_name: Option<String>,
 }
 
-fn wrapper_ref_name(inner_type: &Type) -> Ident {
-    match utils::get_type_ident(inner_type) {
-        Some(i) => format_ident!("{}WrapperRef", i),
-        None => Ident::new("YapsWrapperRef", inner_type.span()),
-    }
-}
+fn get_plugin_struct<'a>(
+    content: &'a mut [Item],
+    struct_name: Option<String>,
+    args_meta: &Meta, /* for diagnostic scope */
+) -> &'a mut ItemStruct {
+    let structs_iter = content.iter_mut().filter_map(|item| match item {
+        Item::Struct(item_struct) => Some(item_struct),
+        _ => None,
+    });
+    match struct_name {
+        Some(s) => {
+            let mut structs: Vec<_> = structs_iter
+                .filter(|item_struct| item_struct.ident == s)
+                .collect();
 
-fn generate_wrapper(inner_type: &Type, extra_fields: &TokenStream) -> ItemStruct {
-    let wrapper_name = wrapper_name(inner_type);
-
-    parse_quote! {
-        struct #wrapper_name<D: #YapsData, SD: #SerializerDeserializer<D>> {
-            // TODO: Not sure this is the idiomatic way to do this.
-            //       Cannot do PhantomData<Data>, because it causes the wrapper type to not
-            //       be Send and Sync.
-            _marker: ::std::marker::PhantomData<dyn Fn(D) + Send + Sync>,
-            inner: #inner_type,
-            serde: SD,
-        
-            #extra_fields
-        }
-    }
-}
-
-fn generate_wrapper_wrap(inner_type: &Type, extra_field_init: &Punctuated<FieldValue, Token![,]>) -> ItemImpl {
-    let wrapper_name = wrapper_name(inner_type);
-    let wrapper_ref_name = wrapper_ref_name(inner_type);
-
-    parse_quote! {
-        impl<D: #YapsData, SD: #SerializerDeserializer<D>> #wrapper_name<D, SD> {
-        
-            fn wrap(inner: #inner_type, serde: SD) -> #wrapper_ref_name<D, SD> {
-                let wrapper = #wrapper_name {
-                    _marker: ::std::marker::PhantomData,
-                    inner,
-                    serde,
-        
-                    #extra_field_init
-                };
-                #wrapper_ref_name(#Arc::new(wrapper))
+            match structs.len() {
+                0 => abort!(args_meta, "No struct named {}", s),
+                1 => structs
+                    .pop()
+                    .expect("Length of structs is 1, so pop expected to return a value"),
+                _ => abort!(args_meta, "Multiple structs named {}", s),
             }
-        
+        }
+        None => {
+            let mut structs: Vec<_> = structs_iter.collect();
+
+            match structs.len() {
+                0 => abort!(args_meta, "No struct"),
+                1 => structs
+                    .pop()
+                    .expect("Length of structs is 1, so pop expected to return a value"),
+                _ => abort!(
+                    args_meta,
+                    "Multiple structs, consider using struct_name macro argument"
+                ),
+            }
         }
     }
 }
 
-pub fn process_yaps_plugin(item: &mut ItemImpl) -> TokenStream {
-    let consumer = YapsConsumer::process(item);
-    let provider = YapsProvider::process(item);
+fn get_plugin_impls<'a>(content: &'a mut [Item], struct_ident: &Ident) -> Vec<&'a mut ItemImpl> {
+    content
+        .iter_mut()
+        .filter_map(|item| match item {
+            Item::Impl(i) => Some(i),
+            _ => None,
+        })
+        .filter(move |item_impl| match &*item_impl.self_ty {
+            Type::Path(p) => p
+                .path
+                .segments
+                .last()
+                .is_some_and(|last_segment| &last_segment.ident == struct_ident),
+            _ => false,
+        })
+        .collect()
+}
 
-    let inner_type = &*item.self_ty;
+pub(crate) struct YapsPluginInfo {
+    pub struct_ident: Ident,
+    pub struct_generics: Generics,
 
-    let wrapper_ident = wrapper_name(inner_type);
-    let wrapper_ref_ident = wrapper_ref_name(inner_type);
+    pub extern_funcs_trait: Ident,
+    pub wrapper_ident: Ident,
 
-    let extra_wrapper_fields = consumer.generate_handle_fields();
-    let extra_wrapper_field_init = consumer.generate_handle_fields_init();
-    let extern_arg_funcs = &consumer.extern_arg_funcs;
+    pub plugin_name: String,
 
-    let wrapper = generate_wrapper(inner_type, &extra_wrapper_fields);
-    let wrapper_wrap = generate_wrapper_wrap(inner_type, &extra_wrapper_field_init);
+    pub export_funcs: Vec<ExportFunc>,
+    pub extern_funcs: Vec<ExternFunc>,
+}
 
-    let consumer_code = consumer.generate_code(&wrapper_ident, &wrapper_ref_ident);
-    let provider_code = provider.generate_code(&wrapper_ref_ident, extern_arg_funcs);
-
-    quote! {
-        #item
-
-        struct #wrapper_ref_ident<D: #YapsData, SD: #SerializerDeserializer<D>>(#Arc<#wrapper_ident<D, SD>>);
-
-        #wrapper
-        #wrapper_wrap
-
-        #consumer_code
-        #provider_code
+impl Default for YapsPluginInfo {
+    fn default() -> Self {
+        YapsPluginInfo {
+            struct_ident: Ident::new("NIL", Span::call_site()),
+            struct_generics: Generics::default(),
+            extern_funcs_trait: Ident::new("NIL", Span::call_site()),
+            wrapper_ident: Ident::new("NIL", Span::call_site()),
+            plugin_name: String::from("NIL"),
+            export_funcs: Vec::new(),
+            extern_funcs: Vec::new(),
+        }
     }
+}
+
+pub(crate) fn process_yaps_module(module: &mut ItemMod, args_meta: &Meta) {
+    let args = match YapsPluginArgs::from_meta(args_meta) {
+        Ok(a) => a,
+        Err(e) => abort!(args_meta, "Invalid yaps_plugin args: {}", e),
+    };
+
+    let content = match &mut module.content {
+        Some((_, c)) => c,
+        None => abort!(module, "Yaps module cannot be empty"),
+    };
+
+    let mut plugin_info = YapsPluginInfo::default();
+
+    {
+        let plugin_struct = get_plugin_struct(content, args.struct_name, args_meta);
+        process_struct(plugin_struct, &mut plugin_info);
+    }
+
+    {
+        let plugin_impls = get_plugin_impls(content, &plugin_info.struct_ident);
+        for item in plugin_impls {
+            process_impl(item, &mut plugin_info);
+        }
+    }
+
+    // TODO: make this customizable
+    plugin_info.plugin_name = plugin_info.struct_ident.to_string();
+
+    content.push(Item::Trait(generate_extern_trait(&plugin_info)));
+    content.push(Item::Impl(generate_extern_funcs_inner_impl(&plugin_info)));
+
+    content.push(Item::Struct(generate_wrapper_struct(&mut plugin_info)));
+    content.push(Item::Impl(generate_wrapper_impl(&plugin_info)));
+    content.push(Item::Impl(generate_wrapper_extern_funcs_impl(&plugin_info)));
+
+    content.push(Item::Impl(generate_provider_impl(&plugin_info)));
+    content.push(Item::Impl(generate_consumer_impl(&plugin_info)));
 }

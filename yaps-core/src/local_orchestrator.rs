@@ -1,21 +1,26 @@
 use crate::{Result, Error};
 use crate::{
-    FunctionId, FunctionHandle, 
+    FuncMetadata, FuncHandle, 
     YapsData,
     FuncProvider, FuncConsumer,
 };
 
 use std::sync::Arc;
 
-use futures::future::join_all;
-use tokio::sync::Mutex;
 use async_trait::async_trait;
 
 
+struct Provider<D> {
+    pub provider: Arc<dyn FuncProvider<D>>,
+    pub funcs: Vec<FuncMetadata>,
+}
+
+type Consumer<D> = Arc<dyn FuncConsumer<D>>;
+
 pub struct LocalOrchestrator<D: YapsData> {
 
-    providers: Vec<Arc<Mutex<dyn FuncProvider<D>>>>,
-    consumers: Vec<Arc<Mutex<dyn FuncConsumer<D>>>>,
+    providers: Vec<Provider<D>>,
+    consumers: Vec<Consumer<D>>,
 
 }
 
@@ -25,53 +30,29 @@ impl<D: YapsData> Default for LocalOrchestrator<D> {
     }
 }
 
+// TODO: Implementation of LocalOrchestrator should maybe be parallelized
+
 #[async_trait]
 impl<D: YapsData> FuncProvider<D> for LocalOrchestrator<D> {
     
-    async fn provided_funcs(&self) -> Result<Vec<FunctionId>> {
-        let provided_funcs = self.providers.iter()
-            .map(|p| async {
-                p.lock().await.provided_funcs().await
-            });
-
-        let provided_funcs = join_all(provided_funcs).await;
-
-        let provided_funcs: Vec<_> = provided_funcs.into_iter()
-            .filter_map(|res| res.ok())
-            .flatten()
+    async fn provided_funcs(&self) -> Result<Vec<FuncMetadata>> {
+        let funcs: Vec<_> = self.providers.iter()
+            .flat_map(|p| &p.funcs)
+            .cloned()
             .collect();
 
-        Ok(provided_funcs)
+        Ok(funcs)
     }
 
-    async fn get_func(&self, id: &FunctionId) -> Result<FunctionHandle<D>> {
-        let providers = self.providers.iter()
-            .map(|p| async {
-                let funcs = p.lock().await.provided_funcs().await;
-                (p.clone(), funcs)
-            });
+    async fn get_func(&self, id: &str) -> Result<Box<dyn FuncHandle<D>>> {
+        let mut providers = self.providers.iter()
+            .filter(|p| p.funcs.iter().any(|f| f.id == id));
 
-        let providers = join_all(providers).await;
+        let provider = providers.next().ok_or(Error::FunctionNotFound(id.to_string()))?;
 
-        let providers: Vec<_> = providers.into_iter()
-            .filter_map(|(p, res)| {
-                if res.is_ok_and(|r| r.contains(id)) {
-                    Some(p)
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let func = provider.provider.get_func(id).await?;
 
-
-        if providers.is_empty() {
-            return Err(Error::FunctionNotFound(id.into()));
-        }
-
-        // TODO: Maybe handle a case where there are multiple plugins
-
-        let provider = providers[0].lock().await;
-        provider.get_func(id).await
+        Ok(func)
     }
 
 }
@@ -79,11 +60,10 @@ impl<D: YapsData> FuncProvider<D> for LocalOrchestrator<D> {
 #[async_trait]
 impl<D: YapsData> FuncConsumer<D> for LocalOrchestrator<D> {
 
-    async fn connect(&mut self, provider: &dyn FuncProvider<D>) -> Result<()> {
-        let results = self.consumers.iter_mut()
-            .map(|c| async { c.lock().await.connect(provider).await });
-
-        join_all(results).await;
+    async fn connect(&self, provider: &dyn FuncProvider<D>) -> Result<()> {
+        for consumer in self.consumers.iter() {
+            consumer.connect(provider).await?;
+        }
 
         Ok(())
     }
@@ -99,24 +79,36 @@ impl<D: YapsData> LocalOrchestrator<D> {
     pub async fn add_provider(&mut self, provider: impl FuncProvider<D> + 'static) -> Result<()> {
         self.connect(&provider).await?;
 
-        self.providers.push(Arc::new(Mutex::new(provider)));
+        let funcs = provider.provided_funcs().await?;
+
+        self.providers.push(Provider {
+            provider: Arc::new(provider),
+            funcs,
+        });
         Ok(())
     }
 
-    pub async fn add_consumer(&mut self, mut consumer: impl FuncConsumer<D> + 'static) -> Result<()> {
+    pub async fn add_consumer(&mut self, consumer: impl FuncConsumer<D> + 'static) -> Result<()> {
         consumer.connect(self).await?;
 
-        self.consumers.push(Arc::new(Mutex::new(consumer)));
+        self.consumers.push(Arc::new(consumer));
         Ok(())
     }
 
-    pub async fn add_plugin(&mut self, mut cp: impl FuncProvider<D> + FuncConsumer<D> + 'static) -> Result<()> {
+    pub async fn add_plugin(&mut self, cp: impl FuncProvider<D> + FuncConsumer<D> + 'static) -> Result<()> {
         self.connect(&cp).await?;
         cp.connect(self).await?;
 
-        let cp = Arc::new(Mutex::new(cp));
+        let cp = Arc::new(cp);
 
-        self.providers.push(cp.clone());
+
+        let funcs = cp.provided_funcs().await?;
+        let provider = Provider {
+            provider: cp.clone(),
+            funcs,
+        };
+
+        self.providers.push(provider);
         self.consumers.push(cp);
         Ok(())
     }

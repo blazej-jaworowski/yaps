@@ -3,5 +3,5 @@ resolver = "2"
 members = [
     "yaps-core",
     "yaps-macros",
-    "yaps-serdes",
+    "yaps-codecs",
 ]
