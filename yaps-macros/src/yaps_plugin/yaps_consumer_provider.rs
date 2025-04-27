@@ -68,7 +68,7 @@ pub(crate) fn generate_provider_impl(info: &YapsPluginInfo) -> ItemImpl {
         impl<D, C> #FuncProvider<D> for #wrapper_ident<D, C>
         where
             D: #YapsData,
-            C: #Codec<Data = D> + #codec_export_bounds + 'static,
+            C: #Codec<Data = D> #codec_export_bounds + 'static,
         {
             async fn provided_funcs(&self) -> #Result<#Vec<#FuncMetadata>> {
                 Ok(#Vec::from([ #( #func_metadatas ),* ]))

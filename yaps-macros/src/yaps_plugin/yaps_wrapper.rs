@@ -25,8 +25,8 @@ pub(crate) fn generate_codec_export_bounds(info: &YapsPluginInfo) -> TokenStream
     let encode_for = EncodeFor;
 
     quote! {
-        #( #decode_for<C, #in_types>  )+*
-        + #( #encode_for<C, #out_types>  )+*
+        #( + #decode_for<C, #in_types> )*
+        #( + #encode_for<C, #out_types> )*
     }
 }
 
@@ -42,8 +42,8 @@ pub(crate) fn generate_codec_extern_bounds(info: &YapsPluginInfo) -> TokenStream
     let encode_for = EncodeFor;
 
     quote! {
-        #( #decode_for<C, #out_types>  )+*
-        + #( #encode_for<C, #in_types>  )+*
+        #( + #decode_for<C, #out_types> )*
+        #( + #encode_for<C, #in_types> )*
     }
 }
 
@@ -90,8 +90,8 @@ pub(crate) fn generate_wrapper_impl(info: &YapsPluginInfo) -> ItemImpl {
         where
             D: #YapsData,
             C: #Codec<Data = D>
-                + #codec_export_bounds
-                + #codec_extern_bounds
+                #codec_export_bounds
+                #codec_extern_bounds
                 + 'static,
         {
             pub fn new(inner: #struct_ident, codec: C) -> #Arc<Self> {
@@ -148,7 +148,7 @@ pub(crate) fn generate_wrapper_extern_funcs_impl(info: &YapsPluginInfo) -> ItemI
         impl<D, C> #extern_funcs_trait for #wrapper_ident<D, C>
         where
             D: #YapsData,
-            C: #Codec<Data = D> + #codec_extern_bounds,
+            C: #Codec<Data = D> #codec_extern_bounds,
         {
             #( #extern_funcs_impls )*
         }
