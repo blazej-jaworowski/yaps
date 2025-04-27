@@ -1,9 +1,8 @@
 use syn::ItemImpl;
 
 use super::{
+    yaps_export::process_export_funcs, yaps_extern::process_extern_funcs,
     yaps_plugin_macro::YapsPluginInfo,
-    yaps_export::process_export_funcs,
-    yaps_extern::process_extern_funcs,
 };
 
 pub(crate) fn process_impl(item: &mut ItemImpl, info: &mut YapsPluginInfo) {

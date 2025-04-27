@@ -1,10 +1,13 @@
-use crate::{codec::{Codec, DecodeFor, EncodeFor}, Error, FuncHandle, Result, YapsData};
+use crate::{
+    Error, FuncHandle, Result, YapsData,
+    codec::{Codec, DecodeFor, EncodeFor},
+};
 
-use std::{future::Future, pin::Pin, sync::Arc};
 use async_trait::async_trait;
+use std::{future::Future, pin::Pin, sync::Arc};
 use tokio::{
-    task::JoinHandle,
     sync::{mpsc, oneshot},
+    task::JoinHandle,
 };
 
 struct ActorCall<D> {
@@ -29,20 +32,20 @@ impl<D: YapsData> ActorHandle<D> {
             while let Some(call) = rx_call.recv().await {
                 let result = func(call.args).await;
 
-                if  call.tx_ret.send(result).is_err() {
+                if call.tx_ret.send(result).is_err() {
                     // TODO: Log return send failure
                 }
             }
             Ok(())
         });
 
-        Ok((
-            Self { tx_call },
-            join_handle,
-        ))
+        Ok((Self { tx_call }, join_handle))
     }
 
-    pub fn spawn_with_codec<C, F, A, R>(func: F, codec: Arc<C>) -> Result<(Self, JoinHandle<Result<()>>)>
+    pub fn spawn_with_codec<C, F, A, R>(
+        func: F,
+        codec: Arc<C>,
+    ) -> Result<(Self, JoinHandle<Result<()>>)>
     where
         C: Codec<Data = D> + DecodeFor<C, A> + EncodeFor<C, R> + 'static,
         F: Fn(A) -> AsyncResult<R> + Send + Sync + 'static,
@@ -68,11 +71,7 @@ impl<D: YapsData> ActorHandle<D> {
 impl<D: YapsData> FuncHandle<D> for ActorHandle<D> {
     async fn call(&self, args: D) -> Result<D> {
         let (tx, rx) = oneshot::channel();
-        let call = ActorCall {
-            args,
-            tx_ret: tx,
-
-        };
+        let call = ActorCall { args, tx_ret: tx };
         self.tx_call
             .send(call)
             .map_err(|e| Error::ChannelSend(e.to_string()))?;

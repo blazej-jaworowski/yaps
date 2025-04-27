@@ -7,14 +7,9 @@ mod utils;
 mod yaps_plugin;
 
 use proc_macro::TokenStream;
-use quote::quote_spanned;
-use syn::{
-    parse_macro_input,
-    ItemMod,
-    Meta,
-    spanned::Spanned,
-};
 use proc_macro_error::proc_macro_error;
+use quote::quote_spanned;
+use syn::{ItemMod, Meta, parse_macro_input, spanned::Spanned};
 
 #[proc_macro_error]
 #[proc_macro_attribute]

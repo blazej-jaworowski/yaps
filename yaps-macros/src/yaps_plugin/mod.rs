@@ -1,10 +1,10 @@
 mod yaps_plugin_macro;
 
-mod yaps_struct;
 mod yaps_impl;
+mod yaps_struct;
 
-mod yaps_extern;
 mod yaps_export;
+mod yaps_extern;
 
 mod yaps_extern_trait;
 mod yaps_wrapper;

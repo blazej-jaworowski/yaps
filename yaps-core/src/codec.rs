@@ -1,9 +1,5 @@
-use crate::{
-    Result,
-    YapsData,
-};
+use crate::{Result, YapsData};
 use async_trait::async_trait;
-
 
 #[async_trait]
 pub trait Codec: Send + Sync {
@@ -22,7 +18,6 @@ pub trait Codec: Send + Sync {
     {
         <Self as DecodeFor<Self, D>>::decode(self, data)
     }
-
 }
 
 pub trait EncodeFor<C: Codec + ?Sized, E> {

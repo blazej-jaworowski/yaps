@@ -1,11 +1,8 @@
 pub mod error;
-pub use error::{Result, Error};
+pub use error::{Error, Result};
 
 mod consumer_provider;
-pub use consumer_provider::{
-    YapsData, FuncMetadata,
-    FuncConsumer, FuncProvider,
-};
+pub use consumer_provider::{FuncConsumer, FuncMetadata, FuncProvider, YapsData};
 
 mod single_provider;
 pub use single_provider::SingleProvider;
@@ -15,8 +12,8 @@ pub use func_handle::FuncHandle;
 
 pub mod actor_handle;
 
-pub mod local_orchestrator;
 pub mod codec;
+pub mod local_orchestrator;
 
 pub use async_trait;
 pub use tokio;

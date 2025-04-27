@@ -1,4 +1,4 @@
-use crate::{func_handle::SimpleHandle, FuncHandle, FuncMetadata, FuncProvider, Result, YapsData};
+use crate::{FuncHandle, FuncMetadata, FuncProvider, Result, YapsData, func_handle::SimpleHandle};
 
 use async_trait::async_trait;
 use std::sync::Arc;

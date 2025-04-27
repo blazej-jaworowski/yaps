@@ -1,14 +1,9 @@
-use crate::{Result, Error};
-use crate::{
-    FuncMetadata, FuncHandle, 
-    YapsData,
-    FuncProvider, FuncConsumer,
-};
+use crate::{Error, Result};
+use crate::{FuncConsumer, FuncHandle, FuncMetadata, FuncProvider, YapsData};
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
-
 
 struct Provider<D> {
     pub provider: Arc<dyn FuncProvider<D>>,
@@ -18,15 +13,16 @@ struct Provider<D> {
 type Consumer<D> = Arc<dyn FuncConsumer<D>>;
 
 pub struct LocalOrchestrator<D: YapsData> {
-
     providers: Vec<Provider<D>>,
     consumers: Vec<Consumer<D>>,
-
 }
 
 impl<D: YapsData> Default for LocalOrchestrator<D> {
     fn default() -> Self {
-        Self { providers: Vec::new(), consumers: Vec::new() }
+        Self {
+            providers: Vec::new(),
+            consumers: Vec::new(),
+        }
     }
 }
 
@@ -34,9 +30,10 @@ impl<D: YapsData> Default for LocalOrchestrator<D> {
 
 #[async_trait]
 impl<D: YapsData> FuncProvider<D> for LocalOrchestrator<D> {
-    
     async fn provided_funcs(&self) -> Result<Vec<FuncMetadata>> {
-        let funcs: Vec<_> = self.providers.iter()
+        let funcs: Vec<_> = self
+            .providers
+            .iter()
             .flat_map(|p| &p.funcs)
             .cloned()
             .collect();
@@ -45,21 +42,23 @@ impl<D: YapsData> FuncProvider<D> for LocalOrchestrator<D> {
     }
 
     async fn get_func(&self, id: &str) -> Result<Box<dyn FuncHandle<D>>> {
-        let mut providers = self.providers.iter()
+        let mut providers = self
+            .providers
+            .iter()
             .filter(|p| p.funcs.iter().any(|f| f.id == id));
 
-        let provider = providers.next().ok_or(Error::FunctionNotFound(id.to_string()))?;
+        let provider = providers
+            .next()
+            .ok_or(Error::FunctionNotFound(id.to_string()))?;
 
         let func = provider.provider.get_func(id).await?;
 
         Ok(func)
     }
-
 }
 
 #[async_trait]
 impl<D: YapsData> FuncConsumer<D> for LocalOrchestrator<D> {
-
     async fn connect(&self, provider: &dyn FuncProvider<D>) -> Result<()> {
         for consumer in self.consumers.iter() {
             consumer.connect(provider).await?;
@@ -67,11 +66,9 @@ impl<D: YapsData> FuncConsumer<D> for LocalOrchestrator<D> {
 
         Ok(())
     }
-
 }
 
 impl<D: YapsData> LocalOrchestrator<D> {
-
     pub fn new() -> Self {
         Self::default()
     }
@@ -95,12 +92,14 @@ impl<D: YapsData> LocalOrchestrator<D> {
         Ok(())
     }
 
-    pub async fn add_plugin(&mut self, cp: impl FuncProvider<D> + FuncConsumer<D> + 'static) -> Result<()> {
+    pub async fn add_plugin(
+        &mut self,
+        cp: impl FuncProvider<D> + FuncConsumer<D> + 'static,
+    ) -> Result<()> {
         self.connect(&cp).await?;
         cp.connect(self).await?;
 
         let cp = Arc::new(cp);
-
 
         let funcs = cp.provided_funcs().await?;
         let provider = Provider {
@@ -112,5 +111,4 @@ impl<D: YapsData> LocalOrchestrator<D> {
         self.consumers.push(cp);
         Ok(())
     }
-
 }

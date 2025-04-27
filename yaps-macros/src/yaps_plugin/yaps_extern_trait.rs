@@ -1,4 +1,4 @@
-use syn::{parse_quote, ImplItemFn, ItemImpl, ItemTrait, LitStr};
+use syn::{ImplItemFn, ItemImpl, ItemTrait, LitStr, parse_quote};
 
 use crate::defs::*;
 

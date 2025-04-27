@@ -1,17 +1,14 @@
+use yaps_codecs::JsonCodec;
 use yaps_core::{
-    Result,
-    local_orchestrator::LocalOrchestrator,
+    FuncProvider, Result, local_orchestrator::LocalOrchestrator,
     serializer_deserializer::SerializerDeserializer,
-    FuncProvider,
 };
 use yaps_macros::yaps_plugin;
-use yaps_codecs::JsonCodec;
 
 struct Adder;
 
 #[yaps_plugin]
 impl Adder {
-    
     #[yaps_export(id = "Adder::add")]
     fn add(&self, a: i32, b: i32) -> i32 {
         a + b
@@ -21,14 +18,12 @@ impl Adder {
     fn sub(&self, a: i32, b: i32) -> i32 {
         a - b
     }
-
 }
 
 struct Multiplier;
 
 #[yaps_plugin]
 impl Multiplier {
-    
     #[yaps_extern(id = "Adder::add")]
     async fn add(a: i32, b: i32) -> i32;
 
@@ -53,7 +48,6 @@ impl Multiplier {
         }
         Ok(i)
     }
-
 }
 
 #[tokio::test]
@@ -66,7 +60,9 @@ async fn single_provider_test() -> Result<()> {
     orchestrator.add_provider(adder).await?;
     orchestrator.add_plugin(multiplier).await?;
 
-    let func = orchestrator.get_func(&"Multiplier::mult".to_string()).await?;
+    let func = orchestrator
+        .get_func(&"Multiplier::mult".to_string())
+        .await?;
 
     let serde = JsonSerde;
     let data = serde.serialize((12, 3))?;

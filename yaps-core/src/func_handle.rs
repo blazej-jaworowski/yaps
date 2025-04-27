@@ -1,6 +1,6 @@
 use crate::{
-    codec::{Codec, DecodeFor, EncodeFor},
     Result, YapsData,
+    codec::{Codec, DecodeFor, EncodeFor},
 };
 
 use async_trait::async_trait;
