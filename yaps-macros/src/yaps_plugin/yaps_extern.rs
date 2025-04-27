@@ -79,20 +79,19 @@ pub(crate) fn process_extern_funcs(item: &mut ItemImpl) -> Vec<ExternFunc> {
             let mut sig = func.sig.clone();
 
             let ret_ty = match sig.output {
-                ReturnType::Type(_, ref mut ty) => ty.as_mut(),
-                ReturnType::Default => &mut parse_quote! {()},
+                ReturnType::Type(_, ref ty) => ty.as_ref().clone(),
+                ReturnType::Default => parse_quote! {()},
             };
-            let extern_ret_ty = ret_ty.clone();
 
             // Wrap the return type in the signature with Result
-            *ret_ty = parse_quote! { #Result<#extern_ret_ty> };
+            sig.output = parse_quote! { -> #Result<#ret_ty> };
 
             ExternFunc {
                 id: attr_args.id,
                 ident: func.sig.ident.clone(),
                 args,
                 sig,
-                ret_ty: extern_ret_ty,
+                ret_ty,
             }
         })
         .collect()
