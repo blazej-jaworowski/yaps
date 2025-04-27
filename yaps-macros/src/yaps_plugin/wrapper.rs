@@ -119,6 +119,7 @@ fn generate_wrapper_extern_func_impl(func: &ExternFunc) -> ImplItemFn {
     let sig = &func.sig;
     let field_name = extern_field_name(&func.ident);
     let id_str = LitStr::new(&func.id, func.ident.span());
+    let arg_idents = utils::punctuated_into_tuple(func.args.to_idents());
 
     parse_quote! {
         #sig {
@@ -127,7 +128,7 @@ fn generate_wrapper_extern_func_impl(func: &ExternFunc) -> ImplItemFn {
                 .get()
                 .ok_or(#Error::FunctionNotInitialized(#id_str.to_string()))?;
 
-            func.call_with_codec(self.codec.as_ref(), (s,)).await
+            func.call_with_codec(self.codec.as_ref(), #arg_idents).await
         }
     }
 }

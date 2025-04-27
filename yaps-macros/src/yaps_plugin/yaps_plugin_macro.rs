@@ -145,6 +145,8 @@ pub(crate) fn process_yaps_module(module: &mut ItemMod, args_meta: &Meta) {
 
     content.insert(0, generate_imports());
 
+    // TODO: add helper `InnerStruct.wrap(self) -> Wrapper` method
+
     content.push(Item::Trait(generate_extern_trait(&plugin_info)));
     content.push(Item::Impl(generate_extern_funcs_inner_impl(&plugin_info)));
 

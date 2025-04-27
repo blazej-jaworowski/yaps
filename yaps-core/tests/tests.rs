@@ -1,73 +1,77 @@
 use yaps_codecs::JsonCodec;
-use yaps_core::{
-    FuncProvider, Result, local_orchestrator::LocalOrchestrator,
-    serializer_deserializer::SerializerDeserializer,
-};
+use yaps_core::{FuncProvider as _, Result, codec::Codec as _, local_hub::LocalHub};
 use yaps_macros::yaps_plugin;
 
-struct Adder;
-
 #[yaps_plugin]
-impl Adder {
-    #[yaps_export(id = "Adder::add")]
-    fn add(&self, a: i32, b: i32) -> i32 {
-        a + b
-    }
+mod adder {
+    #[derive(Default)]
+    pub struct Adder;
 
-    #[yaps_export(id = "Adder::sub")]
-    fn sub(&self, a: i32, b: i32) -> i32 {
-        a - b
+    impl Adder {
+        #[yaps_export(id = "Adder::add")]
+        fn add(&self, a: i32, b: i32) -> i32 {
+            a + b
+        }
+
+        #[yaps_export(id = "Adder::sub")]
+        fn sub(&self, a: i32, b: i32) -> i32 {
+            a - b
+        }
     }
 }
 
-struct Multiplier;
-
 #[yaps_plugin]
-impl Multiplier {
-    #[yaps_extern(id = "Adder::add")]
-    async fn add(a: i32, b: i32) -> i32;
+mod multiplier {
+    use yaps_core::Result;
 
-    #[yaps_extern(id = "Adder::sub")]
-    async fn sub(a: i32, b: i32) -> i32;
+    #[derive(Default)]
+    pub struct Multiplier;
 
-    #[yaps_export(id = "Multiplier::mult")]
-    async fn mult(&self, ext: YapsExtern, a: i32, b: i32) -> Result<i32> {
-        let mut sum = 0;
-        for _ in 0..b {
-            sum = ext.add(sum, a).await?;
+    impl Multiplier {
+        #[yaps_extern(id = "Adder::add")]
+        async fn add(&self, a: i32, b: i32) -> i32;
+
+        #[yaps_extern(id = "Adder::sub")]
+        async fn sub(&self, a: i32, b: i32) -> i32;
+
+        #[yaps_export(id = "Multiplier::mult")]
+        async fn mult(&self, a: i32, b: i32) -> Result<i32> {
+            let mut sum = 0;
+            for _ in 0..b {
+                sum = self.add(sum, a).await?;
+            }
+            Ok(sum)
         }
-        Ok(sum)
-    }
 
-    #[yaps_export(id = "Multiplier::div")]
-    async fn div(&self, ext: YapsExtern, mut a: i32, b: i32) -> Result<i32> {
-        let mut i = 0;
-        while a > 0 {
-            i = ext.add(i, 1).await?;
-            a = ext.sub(a, b).await?;
+        #[yaps_export(id = "Multiplier::div")]
+        async fn div(&self, mut a: i32, b: i32) -> Result<i32> {
+            let mut i = 0;
+            while a > 0 {
+                i = self.add(i, 1).await?;
+                a = self.sub(a, b).await?;
+            }
+            Ok(i)
         }
-        Ok(i)
     }
 }
 
 #[tokio::test]
 async fn single_provider_test() -> Result<()> {
-    let mut orchestrator = LocalOrchestrator::<Vec<u8>>::new();
+    let mut hub = LocalHub::new();
 
-    let adder = AdderWrapper::wrap(Adder, JsonSerde);
-    let multiplier = MultiplierWrapper::wrap(Multiplier, JsonSerde);
+    let adder = adder::AdderWrapper::new(adder::Adder::default(), JsonCodec);
+    let multiplier =
+        multiplier::MultiplierWrapper::new(multiplier::Multiplier::default(), JsonCodec);
 
-    orchestrator.add_provider(adder).await?;
-    orchestrator.add_plugin(multiplier).await?;
+    hub.add_provider(adder).await?;
+    hub.add_plugin(multiplier).await?;
 
-    let func = orchestrator
-        .get_func(&"Multiplier::mult".to_string())
-        .await?;
+    let func = hub.get_func("Multiplier::mult").await?;
 
-    let serde = JsonSerde;
-    let data = serde.serialize((12, 3))?;
+    let codec = JsonCodec;
+    let data = codec.encode((12, 3))?;
     let result = func.call(data).await?;
-    let result: Result<i32> = serde.deserialize(result)?;
+    let result: Result<i32> = codec.decode(result)?;
 
     assert_eq!(result, Ok(36));
 

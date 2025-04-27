@@ -26,7 +26,7 @@ impl<D: YapsData> Default for LocalHub<D> {
     }
 }
 
-// TODO: Implementation of LocalHub should maybe be parallelized
+// TODO: Implementation of LocalHub should be parallelized
 
 #[async_trait]
 impl<D: YapsData> FuncProvider<D> for LocalHub<D> {
