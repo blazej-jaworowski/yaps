@@ -12,12 +12,12 @@ struct Provider<D> {
 
 type Consumer<D> = Arc<dyn FuncConsumer<D>>;
 
-pub struct LocalOrchestrator<D: YapsData> {
+pub struct LocalHub<D: YapsData> {
     providers: Vec<Provider<D>>,
     consumers: Vec<Consumer<D>>,
 }
 
-impl<D: YapsData> Default for LocalOrchestrator<D> {
+impl<D: YapsData> Default for LocalHub<D> {
     fn default() -> Self {
         Self {
             providers: Vec::new(),
@@ -26,10 +26,10 @@ impl<D: YapsData> Default for LocalOrchestrator<D> {
     }
 }
 
-// TODO: Implementation of LocalOrchestrator should maybe be parallelized
+// TODO: Implementation of LocalHub should maybe be parallelized
 
 #[async_trait]
-impl<D: YapsData> FuncProvider<D> for LocalOrchestrator<D> {
+impl<D: YapsData> FuncProvider<D> for LocalHub<D> {
     async fn provided_funcs(&self) -> Result<Vec<FuncMetadata>> {
         let funcs: Vec<_> = self
             .providers
@@ -58,7 +58,7 @@ impl<D: YapsData> FuncProvider<D> for LocalOrchestrator<D> {
 }
 
 #[async_trait]
-impl<D: YapsData> FuncConsumer<D> for LocalOrchestrator<D> {
+impl<D: YapsData> FuncConsumer<D> for LocalHub<D> {
     async fn connect(&self, provider: &dyn FuncProvider<D>) -> Result<()> {
         for consumer in self.consumers.iter() {
             consumer.connect(provider).await?;
@@ -68,7 +68,7 @@ impl<D: YapsData> FuncConsumer<D> for LocalOrchestrator<D> {
     }
 }
 
-impl<D: YapsData> LocalOrchestrator<D> {
+impl<D: YapsData> LocalHub<D> {
     pub fn new() -> Self {
         Self::default()
     }

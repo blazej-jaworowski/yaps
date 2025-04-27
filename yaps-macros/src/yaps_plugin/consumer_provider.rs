@@ -1,11 +1,8 @@
 use quote::quote;
 use syn::{Arm, Expr, ItemImpl, LitStr, parse_quote};
 
-use crate::{
-    defs::*,
-    utils,
-    yaps_plugin::yaps_wrapper::{extern_field_name, generate_codec_export_bounds},
-};
+use super::wrapper::{extern_field_name, generate_codec_export_bounds};
+use crate::{defs::*, utils};
 
 use super::{yaps_export::ExportFunc, yaps_extern::ExternFunc, yaps_plugin_macro::YapsPluginInfo};
 

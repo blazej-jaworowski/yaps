@@ -5,13 +5,13 @@ use darling::FromMeta;
 use proc_macro_error::abort;
 
 use super::{
-    yaps_consumer_provider::{generate_consumer_impl, generate_provider_impl},
+    consumer_provider::{generate_consumer_impl, generate_provider_impl},
+    extern_trait::*,
+    wrapper::*,
     yaps_export::ExportFunc,
     yaps_extern::ExternFunc,
-    yaps_extern_trait::*,
     yaps_impl::process_impl,
     yaps_struct::process_struct,
-    yaps_wrapper::*,
 };
 
 #[derive(FromMeta, Debug)]

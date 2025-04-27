@@ -13,7 +13,7 @@ pub use func_handle::FuncHandle;
 pub mod actor_handle;
 
 pub mod codec;
-pub mod local_orchestrator;
+pub mod local_hub;
 
 pub use async_trait;
 pub use tokio;
