@@ -11,6 +11,8 @@ use proc_macro_error::abort;
 
 use crate::utils::{self, FunctionArgs};
 
+pub const EXTERN_ATTR: &str = "yaps_extern";
+
 #[derive(Debug, FromMeta)]
 struct ExternFuncArgs {
     pub id: String,
@@ -46,7 +48,7 @@ pub(crate) fn process_extern_funcs(item: &mut ItemImpl) -> Vec<ExternFunc> {
             }
         })
         .filter_map(|(f, item)| {
-            let attr = utils::get_attr(&f.attrs, "yaps_extern").cloned();
+            let attr = utils::get_attr(&f.attrs, EXTERN_ATTR).cloned();
             attr.map(|attr| (f, attr, item))
         })
         .map(|(f, attr, item)| {
@@ -63,7 +65,7 @@ pub(crate) fn process_extern_funcs(item: &mut ItemImpl) -> Vec<ExternFunc> {
 
             let attr_args = match ExternFuncArgs::from_meta(&attr.meta) {
                 Ok(a) => a,
-                Err(e) => abort!(attr, "Invalid yaps_extern args: {}", e),
+                Err(e) => abort!(attr, "Invalid {} args: {}", EXTERN_ATTR, e),
             };
 
             match func.sig.receiver() {

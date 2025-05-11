@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 thiserror = "2.0.12"
 async-trait = "0.1.88"
-tokio = { version = "1.44.1", features = ["full"] } # TODO: we don't need all features
+tokio = { version = "1.44.1", features = ["rt", "sync"] }
 futures = "0.3.31"
 serde = { version = "1.0.219", features = ["derive"] }
 

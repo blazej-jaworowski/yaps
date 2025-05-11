@@ -86,6 +86,7 @@ fn generate_imports() -> Item {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct YapsPluginInfo {
     pub struct_ident: Ident,
     pub struct_generics: Generics,

@@ -1,4 +1,4 @@
-// TODO: Wait the API to stabilise
+// TODO: Wait for the API to stabilise
 
 // use trybuild;
 

@@ -15,7 +15,6 @@ quote = "1.0.40"
 syn = { version = "2.0.100", features = ["full", "extra-traits", "visit-mut"] }
 
 [dev-dependencies]
-tokio = { version = "1.44.2", features = ["full"] } # TODO: we don't need all the features
 yaps-codecs = { path = "../yaps-codecs" }
 yaps-core = { path = "../yaps-core" }
 trybuild = "1.0.104"
