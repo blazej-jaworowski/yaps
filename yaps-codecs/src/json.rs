@@ -8,6 +8,7 @@ use yaps_core::{
 #[derive(Debug, Clone, Default)]
 pub struct JsonCodec;
 
+#[derive(Debug)]
 pub struct JsonData(Vec<u8>);
 
 impl YapsData for JsonData {}

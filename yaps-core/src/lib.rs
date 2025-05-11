@@ -1,3 +1,5 @@
+#![warn(missing_debug_implementations)]
+
 pub mod error;
 pub use error::{Error, Result};
 

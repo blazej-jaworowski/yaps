@@ -3,6 +3,7 @@ use crate::{FuncHandle, FuncMetadata, FuncProvider, Result, YapsData, func_handl
 use async_trait::async_trait;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct SingleProvider<D: YapsData, F: Fn(D) -> Result<D> + Send + Sync + 'static> {
     _marker: std::marker::PhantomData<fn(D)>,
     id: String,

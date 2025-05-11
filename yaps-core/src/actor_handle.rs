@@ -15,6 +15,7 @@ struct ActorCall<D> {
     tx_ret: oneshot::Sender<Result<D>>,
 }
 
+#[derive(Debug)]
 pub struct ActorHandle<D> {
     tx_call: mpsc::UnboundedSender<ActorCall<D>>,
 }

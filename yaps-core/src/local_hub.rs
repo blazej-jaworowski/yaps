@@ -12,6 +12,8 @@ struct Provider<D> {
 
 type Consumer<D> = Arc<dyn FuncConsumer<D>>;
 
+// TODO: Implement Debug
+#[allow(missing_debug_implementations)]
 pub struct LocalHub<D: YapsData> {
     providers: Vec<Provider<D>>,
     consumers: Vec<Consumer<D>>,
