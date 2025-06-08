@@ -13,7 +13,7 @@ mod adder {
             a + b
         }
 
-        #[yaps_export(id = "sub")]
+        #[yaps_export(namespace = "Subber", id = "sub")]
         fn sub_test(&self, a: i32, b: i32) -> i32 {
             a - b
         }
@@ -27,13 +27,15 @@ mod multiplier {
     #[derive(Default)]
     pub struct Multiplier;
 
+    #[yaps_extern(namespace = "Adder")]
     impl Multiplier {
-        #[yaps_extern(id = "Adder::add")]
         async fn add(&self, a: i32, b: i32) -> i32;
 
-        #[yaps_extern(id = "Adder::sub")]
+        #[yaps_extern(namespace = "Subber")]
         async fn sub(&self, a: i32, b: i32) -> i32;
+    }
 
+    impl Multiplier {
         #[yaps_export(id = "mult")]
         async fn mult(&self, a: i32, b: i32) -> Result<i32> {
             let mut sum = 0;

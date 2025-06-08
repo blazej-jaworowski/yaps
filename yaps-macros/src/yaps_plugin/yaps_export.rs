@@ -1,9 +1,9 @@
 use darling::FromMeta;
 use proc_macro_error::abort;
-use syn::{Attribute, Ident, ImplItem, ImplItemFn, ItemImpl, Meta, ReturnType, Type, parse_quote};
+use syn::{Ident, ImplItem, ImplItemFn, ItemImpl, ReturnType, Type, parse_quote};
 
 use crate::{
-    utils::{self, FunctionArgs},
+    utils::{self, FunctionArgs, parse_darling_attr},
     yaps_plugin::yaps_extern::EXTERN_ATTR,
 };
 
@@ -41,22 +41,22 @@ fn process_item(item: &mut ImplItem, outer_args: &Option<ExportFuncArgs>) -> Opt
 
     let args = utils::pop_attr(&mut item.attrs, EXPORT_ATTR)
         .as_ref()
-        .map(parse_attr);
+        .map(parse_darling_attr);
 
     let args = merge_args(args, outer_args)?;
 
     Some(process_fn_item(item, args))
 }
 
-fn process_fn_item(item: &mut ImplItemFn, args: ExportFuncArgs) -> ExportFunc {
+fn process_fn_item(item: &ImplItemFn, args: ExportFuncArgs) -> ExportFunc {
     if let Some(attr) = utils::get_attr(&item.attrs, EXTERN_ATTR) {
-        abort!(attr, "Export impl block cannot contain extern funcs")
+        abort!(attr, "Export function can't be extern");
     }
 
     match item.sig.receiver() {
         Some(r) => {
             if r.reference.is_none() || r.mutability.is_some() {
-                abort!(r, "Export func must take &self")
+                abort!(r, "Export func must take &self");
             }
         }
         None => abort!(item.sig, "Export func must take &self"),
@@ -82,48 +82,36 @@ fn process_fn_item(item: &mut ImplItemFn, args: ExportFuncArgs) -> ExportFunc {
     }
 }
 
-fn parse_attr(attr: &Attribute) -> ExportFuncArgs {
-    match attr.meta {
-        Meta::Path(_) => ExportFuncArgs::default(),
-        Meta::List(_) => match ExportFuncArgs::from_meta(&attr.meta) {
-            Ok(a) => a,
-            Err(e) => abort!(attr, "Invalid {} args: {}", EXPORT_ATTR, e),
-        },
-        _ => abort!(attr, "Invalid {} usage", EXPORT_ATTR),
-    }
-}
-
 fn get_outer_args(item: &mut ItemImpl) -> Option<ExportFuncArgs> {
-    let outer_attrs = utils::pop_attr(&mut item.attrs, EXPORT_ATTR);
-    let mut outer_args = outer_attrs.as_ref().map(parse_attr);
-
-    if let Some(ref mut outer_args) = outer_args {
-        if outer_args.id.is_some() {
-            abort!(outer_attrs, "{} on impl block cannot set id", EXPORT_ATTR)
-        }
-
-        if let Some(ref mut namespace) = outer_args.namespace {
-            if namespace == "auto" {
-                *namespace = get_impl_type_string(item);
-            }
-        }
-    }
+    let outer_attrs = utils::pop_attr(&mut item.attrs, EXPORT_ATTR)?;
 
     if let Some(attr) = utils::get_attr(&item.attrs, EXTERN_ATTR) {
         abort!(attr, "Impl block can either be extern or export, not both")
     }
 
-    outer_args
+    let mut outer_args: ExportFuncArgs = parse_darling_attr(&outer_attrs);
+
+    if outer_args.id.is_some() {
+        abort!(outer_attrs, "{} on impl block cannot set id", EXPORT_ATTR)
+    }
+
+    if let Some(ref mut namespace) = outer_args.namespace {
+        if namespace == "auto" {
+            *namespace = get_impl_type_string(item);
+        }
+    }
+
+    Some(outer_args)
 }
 
-fn get_impl_type_string(item: &ItemImpl) -> String {
+pub fn get_impl_type_string(item: &ItemImpl) -> String {
     match item.self_ty.as_ref() {
         Type::Path(p) => p
             .path
             .get_ident()
-            .expect("process_export_funcs should only be called on plugin struct impl")
+            .expect("get_impl_type_string should only be called on plugin struct impl")
             .to_string(),
-        _ => panic!("process_export_funcs should only be called on plugin struct impl"),
+        _ => panic!("get_impl_type_string should only be called on plugin struct impl"),
     }
 }
 

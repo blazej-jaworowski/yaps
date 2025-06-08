@@ -6,6 +6,6 @@ use super::{
 };
 
 pub(crate) fn process_impl(item: &mut ItemImpl, info: &mut YapsPluginInfo) {
-    info.export_funcs = process_export_funcs(item);
-    info.extern_funcs = process_extern_funcs(item);
+    info.export_funcs.append(&mut process_export_funcs(item));
+    info.extern_funcs.append(&mut process_extern_funcs(item));
 }

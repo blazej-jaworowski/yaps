@@ -11,5 +11,6 @@ futures = "0.3.31"
 serde = { version = "1.0.219", features = ["derive"] }
 
 [dev-dependencies]
+tokio = { version = "1.44.1", features = ["macros"] }
 yaps-macros = { path = "../yaps-macros" }
 yaps-codecs = { path = "../yaps-codecs" }

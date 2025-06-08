@@ -1,7 +1,9 @@
+use darling::FromMeta;
+use proc_macro_error::abort;
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
 use syn::{
-    Attribute, FnArg, Ident, Pat, Signature, Token, Type, parse_quote, punctuated::Punctuated,
+    Attribute, FnArg, Ident, Meta, Pat, Signature, Token, Type, parse_quote, punctuated::Punctuated,
 };
 
 #[derive(Debug, Clone)]
@@ -72,4 +74,15 @@ pub fn pop_attr(attributes: &mut Vec<Attribute>, ident: &str) -> Option<Attribut
     attributes.retain(|attr| !attr.path().is_ident(ident));
 
     Some(attr)
+}
+
+pub fn parse_darling_attr<A: FromMeta + Default>(attr: &Attribute) -> A {
+    match attr.meta {
+        Meta::Path(_) => A::default(),
+        Meta::List(_) => match A::from_meta(&attr.meta) {
+            Ok(a) => a,
+            Err(e) => abort!(attr, "Invalid attribute args: {}", e),
+        },
+        _ => abort!(attr, "Invalid attribute usage"),
+    }
 }

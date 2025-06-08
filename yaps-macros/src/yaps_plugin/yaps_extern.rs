@@ -4,18 +4,21 @@ use syn::{
     Ident, ImplItem, ItemImpl, ReturnType, Signature, TraitItemFn, Type, parse_quote, parse2,
 };
 
-use crate::defs::*;
+use crate::{defs::*, utils::parse_darling_attr};
 
 use darling::FromMeta;
 use proc_macro_error::abort;
 
 use crate::utils::{self, FunctionArgs};
 
+use super::yaps_export::EXPORT_ATTR;
+
 pub const EXTERN_ATTR: &str = "yaps_extern";
 
-#[derive(Debug, FromMeta)]
+#[derive(Debug, FromMeta, Default, Clone)]
 struct ExternFuncArgs {
-    pub id: String,
+    id: Option<String>,
+    namespace: Option<String>,
 }
 
 #[derive(Debug)]
@@ -30,71 +33,116 @@ pub(crate) struct ExternFunc {
     pub id: String,
 }
 
-// TODO: Ugly
-
 pub(crate) fn process_extern_funcs(item: &mut ItemImpl) -> Vec<ExternFunc> {
+    let outer_args = get_outer_args(item);
     item.items
         .iter_mut()
-        .filter_map(|item| match item {
-            ImplItem::Fn(f) => Some((f.to_token_stream(), item)),
-            ImplItem::Verbatim(ts) => Some((ts.clone(), item)),
-            _ => None,
-        })
-        .filter_map(|(token_stream, item)| {
-            if let Ok(f) = parse2::<TraitItemFn>(token_stream) {
-                Some((f, item))
-            } else {
-                None
-            }
-        })
-        .filter_map(|(f, item)| {
-            let attr = utils::get_attr(&f.attrs, EXTERN_ATTR).cloned();
-            attr.map(|attr| (f, attr, item))
-        })
-        .map(|(f, attr, item)| {
-            *item = ImplItem::Verbatim(TokenStream::new());
-            (f, attr)
-        })
-        .map(|(func, attr)| {
-            if func.sig.asyncness.is_none() {
-                abort!(
-                    func.sig,
-                    "Extern funcs are inherently async, you need to declare them as such"
-                );
-            }
-
-            let attr_args = match ExternFuncArgs::from_meta(&attr.meta) {
-                Ok(a) => a,
-                Err(e) => abort!(attr, "Invalid {} args: {}", EXTERN_ATTR, e),
-            };
-
-            match func.sig.receiver() {
-                Some(r) => {
-                    if r.reference.is_none() || r.mutability.is_some() {
-                        abort!(r, "Extern func takes &self")
-                    }
-                }
-                None => abort!(func.sig, "Extern func takes &self"),
-            };
-            let args = FunctionArgs::from(&func.sig);
-
-            let mut sig = func.sig.clone();
-
-            let ret_ty = match sig.output {
-                ReturnType::Type(_, ref ty) => ty.as_ref().clone(),
-                ReturnType::Default => parse_quote! {()},
-            };
-
-            // Wrap the return type in the signature with Result
-            sig.output = parse_quote! { -> #Result<#ret_ty> };
-
-            ExternFunc {
-                id: attr_args.id,
-                ident: func.sig.ident.clone(),
-                args,
-                sig,
-                ret_ty,
-            }
-        })
+        .filter_map(|i| process_item(i, &outer_args))
         .collect()
+}
+
+fn process_item(item: &mut ImplItem, outer_args: &Option<ExternFuncArgs>) -> Option<ExternFunc> {
+    let token_stream = match item {
+        ImplItem::Fn(f) => f.to_token_stream(),
+        ImplItem::Verbatim(ts) => ts.clone(),
+        _ => return None,
+    };
+
+    let func = parse2::<TraitItemFn>(token_stream).ok()?;
+
+    let args = utils::get_attr(&func.attrs, EXTERN_ATTR).map(parse_darling_attr);
+
+    let args = merge_args(args, outer_args)?;
+
+    *item = ImplItem::Verbatim(TokenStream::new());
+
+    Some(process_fn_item(&func, args))
+}
+
+fn process_fn_item(item: &TraitItemFn, args: ExternFuncArgs) -> ExternFunc {
+    if let Some(attr) = utils::get_attr(&item.attrs, EXPORT_ATTR) {
+        abort!(attr, "Extern function can't be export");
+    }
+
+    if item.sig.asyncness.is_none() {
+        abort!(
+            item.sig,
+            "Extern funcs are inherently async, you need to declare them as such"
+        );
+    }
+
+    match item.sig.receiver() {
+        Some(r) => {
+            if r.reference.is_none() || r.mutability.is_some() {
+                abort!(r, "Extern func takes &self")
+            }
+        }
+        None => abort!(item.sig, "Extern func takes &self"),
+    };
+
+    let mut sig = item.sig.clone();
+
+    let ret_ty = match sig.output {
+        ReturnType::Type(_, ref ty) => ty.as_ref().clone(),
+        ReturnType::Default => parse_quote! {()},
+    };
+
+    // Wrap the return type in the signature with Result
+    sig.output = parse_quote! { -> #Result<#ret_ty> };
+
+    let mut id = args.id.unwrap_or(item.sig.ident.to_string());
+
+    if let Some(namespace) = args.namespace {
+        id = format!("{namespace}::{id}");
+    }
+
+    ExternFunc {
+        id,
+        ident: item.sig.ident.clone(),
+        args: FunctionArgs::from(&item.sig),
+        sig,
+        ret_ty,
+    }
+}
+
+fn merge_args(
+    args: Option<ExternFuncArgs>,
+    outer_args: &Option<ExternFuncArgs>,
+) -> Option<ExternFuncArgs> {
+    let mut args = match args {
+        Some(a) => a,
+        None => return outer_args.clone(),
+    };
+
+    let outer_args = match outer_args {
+        Some(a) => a,
+        None => return Some(args),
+    };
+
+    match args.namespace {
+        None => args.namespace = outer_args.namespace.clone(),
+        Some(ref s) => {
+            if s.is_empty() {
+                args.namespace = None
+            }
+        }
+    };
+
+    Some(args)
+}
+
+fn get_outer_args(item: &mut ItemImpl) -> Option<ExternFuncArgs> {
+    let outer_attrs = utils::pop_attr(&mut item.attrs, EXTERN_ATTR)?;
+
+    if let Some(attr) = utils::get_attr(&item.attrs, EXPORT_ATTR) {
+        abort!(attr, "Impl block can either be extern or export, not both")
+    }
+
+    let outer_args: ExternFuncArgs = parse_darling_attr(&outer_attrs);
+
+    if outer_args.id.is_some() {
+        abort!(outer_attrs, "{} on impl block cannot set id", EXTERN_ATTR)
+    }
+
+    Some(outer_args)
 }
